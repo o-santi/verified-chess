@@ -90,7 +90,7 @@ Module S.
   Qed.
   Theorem lt_trans : forall x y z : S.t, S.lt x y -> S.lt y z -> S.lt x z.
   Proof.
-    unfold lt. intros. Search (?a < ?b -> ?b < ?c ->  ?a < ?c). Check PeanoNat.Nat.lt_trans. apply (@PeanoNat.Nat.lt_trans (square_to_nat x) (square_to_nat y) (square_to_nat z)). apply H0. apply H1.
+    unfold lt. intros. apply (@PeanoNat.Nat.lt_trans (square_to_nat x) (square_to_nat y) (square_to_nat z)). apply H0. apply H1.
   Qed.
     
   Theorem lt_not_eq : forall x y : S.t, S.lt x y -> ~ S.eq x y.
