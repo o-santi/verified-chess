@@ -1,13 +1,16 @@
 Require Import Coq.Lists.List.
+Import ListNotations.
 Require Import Coq.Init.Datatypes.
-Require Import Coq.FSets.FMapAVL Coq.Structures.OrderedTypeEx. 
+Require Import Coq.FSets.FMapAVL Coq.Structures.OrderedTypeEx.
+Require Import Coq.FSets.FSetAVL.
+Require Import Coq.FSets.FSetFacts.
+Require Import Coq.Classes.RelationClasses.
 
 Inductive File : Type := A | B | C | D | E | F | G | H.
 
 Inductive Rank: Type := R1 | R2 | R3 | R4 | R5 | R6 | R7 | R8.
 
 Definition Square : Type := File * Rank.
-
 
 Definition file_equal (f1: File) (f2: File) :=
   match f1, f2 with
@@ -110,6 +113,8 @@ Module S.
 End S.
 
 Module Import SquareMap := FMapAVL.Make S.
+Module Import SquareSet := FSetAVL.Make S.
+Module SquareSetProp := WFacts_fun S.
 
 Inductive Piece : Type := Pawn | Queen | King | Bishop | Rook | Horse.
 
@@ -126,6 +131,11 @@ Definition color_equal (c1: Color) (c2: Color) :=
   | White, White | Black, Black => true
   | _, _ => false
   end.
+
+Theorem color_eq_refl : forall c1, color_equal c1 c1 = true.
+Proof.
+  intros. destruct c1; reflexivity.
+Qed.
 
 Definition invert (c: Color) :=
   match c with
@@ -196,7 +206,13 @@ Definition is_king (p: Piece) :=
 
 Definition has_enemy (b: Board) (sq: Square) (color: Color) :=
   match get_square b sq with
-  | Some (piece, enemy_color) => color_equal color (invert enemy_color)
+  | Some (piece, enemy_color) => color_equal (invert color) enemy_color
+  | None => false
+  end.
+
+Definition has_ally (b: Board) (sq: Square) (color: Color) :=
+  match get_square b sq with
+  | Some (piece, ally_color) => color_equal color ally_color
   | None => false
   end.
 
@@ -206,70 +222,215 @@ Definition square_empty b sq :=
   | None => true
   end.
 
-Definition attacks (b: Board) (from: Square) :=
+(* This is a little dumb but I can't think of anything better *)
+(* while still convincing the compiler that it'll terminate *)
+Definition cross (b: Board) (from: Square) (color: Color) :=
+  let (file, rank) := from in
+  let files: list File := [ A; B; C; D; E; F; G; H ] in
+  let ranks: list Rank := [ R1; R2; R3; R4; R5; R6; R7; R8 ] in
+  let (down, _) :=
+    @fold_right (SquareSet.t * bool) Rank
+      (fun r acc => let (can_move, hit) := acc in
+                 if hit then
+                   acc
+                 else if Nat.ltb (rank_to_nat r) (rank_to_nat rank) then
+                   if has_ally b (file, r) color then
+                     (can_move, true)
+                   else if has_enemy b (file, r) color then
+                     (add (file, r) can_move, true)
+                   else
+                     (add (file, r) can_move, false)
+                 else acc) (empty, false) ranks in
+  let (up, _) :=
+    @fold_left (SquareSet.t * bool) Rank
+      (fun acc r => let (can_move, hit) := acc in
+                 if hit then
+                   acc
+                 else if Nat.ltb (rank_to_nat rank) (rank_to_nat r) then
+                   if has_ally b (file, r) color then
+                     (can_move, true)
+                   else if has_enemy b (file, r) color then
+                     (add (file, r) can_move, true)
+                   else
+                     (add (file, r) can_move, false)
+                      else acc) ranks (empty, false) in
+  let (to_left, _) :=
+    @fold_right (SquareSet.t * bool) File
+      (fun f acc => let (can_move, hit) := acc in
+                 if hit then
+                   acc
+                 else if Nat.ltb (file_to_nat f) (file_to_nat file) then
+                   if has_ally b (f, rank) color then
+                     (can_move, true)
+                   else if has_enemy b (f, rank) color then
+                     (add (f, rank) can_move, true)
+                   else
+                     (add (f, rank) can_move, false)
+                 else acc) (empty, false) files in
+  let (to_right, _) :=
+    @fold_left (SquareSet.t * bool) File
+      (fun acc f => let (can_move, hit) := acc in
+                 if hit then
+                   acc
+                 else if Nat.ltb (file_to_nat file) (file_to_nat f) then
+                   if has_ally b (f, rank) color then
+                     (can_move, true)
+                   else if has_enemy b (f, rank) color then
+                     (add (f, rank) can_move, true)
+                   else
+                     (add (f, rank) can_move, false)
+                 else acc) files (empty, false) in
+  union (union (union down up) to_left) to_right.
+
+Definition attacks (b: Board) (from: Square) : SquareSet.t :=
   let (from_file, from_rank) := from in
+  let unwrap := fun o => match o with Some p => [p] | None => [] end in
+  let flatten := flat_map unwrap in
+  let flatten2 := flat_map (fun o => match o with Some o => unwrap o | None => [] end) in
+  let flatten3 := flat_map (fun o => match o with Some o => match o with Some o => unwrap o | None => [] end | None => [] end) in
   match get_square b from with
   | Some (Pawn, color) =>
       match (rank_inc from_rank color) with
       | Some next_rank =>
           let left_attack :=
             match file_dec from_file with
-            | Some next_file => 
-                if has_enemy b (next_file, next_rank) color then
-                  (next_file, next_rank) :: nil
-                else
-                  nil
-            | None => nil
+            | Some next_file => add (next_file, next_rank) empty
+            | None => empty
             end in
           let right_attack :=
             match file_inc from_file with
-            | Some next_file => 
-                if has_enemy b (next_file, next_rank) color then
-                  (next_file, next_rank) :: nil
-                else
-                  nil
-            | None => nil
+            | Some next_file => add (next_file, next_rank) empty
+            | None => empty
             end in
-          concat (left_attack :: right_attack :: nil)
-      | None => nil
+          SquareSet.union left_attack right_attack
+      | None => empty
       end
-  | _ => nil
+  | Some (King, color) =>
+      let squares :=
+        flatten [
+            option_map (fun rank => (from_file, rank)) (rank_inc from_rank White);
+            option_map (fun rank => (from_file, rank)) (rank_inc from_rank Black);
+            option_map (fun file => (file, from_rank)) (file_inc from_file);
+            option_map (fun file => (file, from_rank)) (file_dec from_file)
+          ] ++ flatten2 [
+            option_map (fun f => option_map (fun r => (f, r)) (rank_inc from_rank Black)) (file_inc from_file);
+            option_map (fun f => option_map (fun r => (f, r)) (rank_inc from_rank Black)) (file_dec from_file);
+            option_map (fun f => option_map (fun r => (f, r)) (rank_inc from_rank White)) (file_inc from_file);
+            option_map (fun f => option_map (fun r => (f, r)) (rank_inc from_rank White)) (file_dec from_file)
+          ] in
+      fold_left (fun (acc: SquareSet.t) (elem: Square) => add elem acc) squares SquareSet.empty
+  | Some (Horse, color) =>
+      let squares :=
+        flatten3 [
+            option_map (fun f => option_map (fun f => option_map (fun r => (f, r)) (rank_inc from_rank White)) (file_inc f)) (file_inc from_file);
+            option_map (fun f => option_map (fun f => option_map (fun r => (f, r)) (rank_inc from_rank Black)) (file_inc f)) (file_inc from_file);
+            option_map (fun f => option_map (fun f => option_map (fun r => (f, r)) (rank_inc from_rank White)) (file_dec f)) (file_dec from_file);
+            option_map (fun f => option_map (fun f => option_map (fun r => (f, r)) (rank_inc from_rank Black)) (file_dec f)) (file_dec from_file);
+            option_map (fun r => option_map (fun r => option_map (fun f => (f, r)) (file_inc from_file)) (rank_inc r White)) (rank_inc from_rank White);
+            option_map (fun r => option_map (fun r => option_map (fun f => (f, r)) (file_dec from_file)) (rank_inc r White)) (rank_inc from_rank White);
+            option_map (fun r => option_map (fun r => option_map (fun f => (f, r)) (file_inc from_file)) (rank_inc r Black)) (rank_inc from_rank Black);
+            option_map (fun r => option_map (fun r => option_map (fun f => (f, r)) (file_dec from_file)) (rank_inc r Black)) (rank_inc from_rank Black)
+          ] in
+      fold_left (fun (acc: SquareSet.t) (elem: Square) => add elem acc) squares SquareSet.empty
+  | Some (Rook, color) => cross b from color
+  | _ => empty
   end.
 
-Definition valid_moves (b: Board) (from: Square) :=
+Definition is_attacked (b: Board) (original_square: Square) (original_color: Color) :=
+  SquareMap.fold
+    (fun square (piece_color: (Piece * Color)) acc =>
+       let (piece, color) := piece_color in
+       let piece_attacks := attacks b square in
+       orb acc (andb (SquareSet.mem original_square piece_attacks) (color_equal (invert color) original_color))) b false.
+
+Definition valid_moves (b: Board) (from: Square) (turn: Color) :=
   match get_square b from with
-  | Some (Pawn, color) =>
-      let (from_file, from_rank) := from in
-      let next_rank := rank_inc from_rank color in
-      match next_rank with
-      | Some next_rank =>
-          let forward_movement :=
-            if square_empty b (from_file, next_rank) then
-              let (start_rank, jump_rank) := double_movement color in
-              let goal := (from_file, jump_rank) in
-              let double :=
-                if andb (rank_equal from_rank start_rank) (square_empty b goal) then
-                  goal :: nil
-                else
-                  nil in
-              (from_file, next_rank) :: double
-            else nil in
-          concat ((attacks b from) :: forward_movement :: nil)
-      | None => nil
-      end
-  (* | Some (King, color) => *)
-  | _ => nil
+  | Some (piece, color) =>
+      if color_equal color turn then
+        match piece with
+          | Pawn => 
+              let (from_file, from_rank) := from in
+              let next_rank := rank_inc from_rank color in
+              match next_rank with
+              | Some next_rank =>
+                  let forward_movement :=
+                    if square_empty b (from_file, next_rank) then
+                      let (start_rank, jump_rank) := double_movement color in
+                      let goal := (from_file, jump_rank) in
+                      let double :=
+                        if andb (rank_equal from_rank start_rank) (square_empty b goal) then
+                          add goal empty
+                        else
+                          empty in
+                      add (from_file, next_rank) double
+                    else empty in
+                  let pawn_attacks := filter (fun sq => has_enemy b sq color) (attacks b from) in
+                  union pawn_attacks forward_movement
+              | None => empty
+              end
+        | King =>
+            let attack_squares := attacks b from in
+            filter (fun sq => andb (negb (is_attacked b sq color)) (negb (has_ally b sq color))) attack_squares
+        | _ =>
+            let attack_squares := attacks b from in
+            filter (fun sq => negb (has_ally b sq color)) attack_squares
+        end
+      else empty
+  | None => empty
   end.
 
 Definition default_board :=
-  SquareMap.add (A, R4) (Pawn, Black)
-    (SquareMap.add (B, R3) (Pawn, Black)
-       (SquareMap.add (A, R2) (Pawn, White) (empty (Piece * Color)))).
+  SquareMap.add (C, R3) (Rook, White)
+    (SquareMap.add (D, R4) (Horse, White)
+       (SquareMap.add (B, R3) (King, Black) 
+          (SquareMap.add (B, R2) (Pawn, White) (SquareMap.empty (Piece * Color))))).
 
-Compute (attacks default_board (A, R2)).
- 
+Compute (elements (valid_moves default_board (C, R3) Black)).
+
+Theorem king_cant_move_into_attack : forall b (from to : Square) color,
+    get_square b from = Some (King, color) ->
+    In to (valid_moves b from color) ->
+    is_attacked b to color = false.
+Proof.
+  intros.
+  unfold valid_moves in H1. unfold In in H1. rewrite H0 in H1. rewrite color_eq_refl in H1. apply filter_2 in H1.
+  - apply andb_prop in H1. destruct H1. apply negb_true_iff in H1. apply H1.
+  - unfold compat_bool. unfold Proper. unfold "==>". intros.
+    rewrite square_eq_refl in H2. destruct H2. reflexivity.
+Qed.
+
+Theorem piece_cant_go_to_same_place : forall b (from: Square) piece color,
+    get_square b from = Some (piece, color) ->
+    ~ In from (valid_moves b from).
+Proof. Admitted.
+
+Theorem piece_cant_eat_same_color : forall b p1 p2 (from to: Square) c1 c2,
+    get_square b from = Some (p1, c1) ->
+    get_square b to = Some (p2, c2) ->
+    SquareSet.In to (valid_moves b from) ->
+    color_equal c1 c2 = false.
+Proof. Admitted.
+
+  (* intros. *)
+  (* unfold valid_moves in H2. unfold In in H2. rewrite H0 in H2. destruct p1. *)
+  (* - destruct from. destruct (rank_inc r c1). *)
+  (*   + unfold square_empty in H2. destruct (get_square b (f, r0)). *)
+  (*     * apply union_1 in H2. destruct H2. *)
+  (*       -- apply filter_2 in H2. unfold has_enemy in H2. rewrite H1 in H2. unfold color_equal in *. destruct c1; destruct c2; simpl in *; symmetry in H2; try apply H2; reflexivity. *)
+  (*          unfold compat_bool. unfold Proper. unfold "==>". intros. apply square_eq_refl in H3. destruct H3. reflexivity. *)
+  (*       -- apply elements_1 in H2. unfold elements in H2. unfold MSet.elements in H2. unfold MSet.Raw.elements in H2. simpl in H2. apply InA_nil in H2. destruct H2. *)
+  (*     * apply union_1 in H2. destruct H2. *)
+  (*       -- apply filter_2 in H2. unfold has_enemy in H2. rewrite H1 in H2. unfold color_equal in *. destruct c1; destruct c2; simpl in *; symmetry in H2; try apply H2; reflexivity. *)
+  (*          unfold compat_bool. unfold Proper. unfold "==>". intros. apply square_eq_refl in H3. destruct H3. reflexivity. *)
+  (*       -- destruct c1; simpl in *. *)
+  (*          --- destruct (rank_equal r R2). *)
+  (*              ---- destruct (get_square b (f, R4)). *)
+
 Inductive step : Board -> Color -> Type :=
+| Checkmate board turn :
+  forall square, (valid_moves b square turn) = empty ->
+  step board turn
 | Movement board turn piece from to:
   get_square board from = Some (piece, turn) ->
-  List.In to (valid_moves board from) ->
+  SquareSet.In to (valid_moves board from) ->
   step (SquareMap.add to (piece, turn) board) (invert turn).
