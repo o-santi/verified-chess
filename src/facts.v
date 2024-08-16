@@ -61,7 +61,7 @@ Proof.
   destruct p. simpl in H. inversion H; subst; clear H.
   apply OrdSquareMapProp.min_elt_MapsTo in E.
   apply SquareMapProp.filter_iff in E.
-  - destruct E. Search SquareMap.MapsTo. apply SquareMap.find_1 in H. destruct c.
+  - destruct E. apply SquareMap.find_1 in H. destruct c.
     apply andb_prop in H0 as [King Color]. destruct piece; destruct color; destruct turn; try discriminate; apply H.
   - unfold Proper. intros sq1 sq2 G x y J. destruct J. reflexivity.
 Defined.
