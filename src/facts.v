@@ -13,7 +13,7 @@ Module SquareMapPropF := SquareMapProp.F.
 Theorem set_is_empty : forall x, ~ SquareSet.In x SquareSet.empty.
 Proof.
   intros x H.
-  Search SquareSet.In. apply SquareSet.mem_1 in H. unfold SquareSet.mem in H. unfold SquareSet.MSet.mem in H. simpl in H. discriminate H.
+  apply SquareSet.mem_1 in H. unfold SquareSet.mem in H. unfold SquareSet.MSet.mem in H. simpl in H. discriminate H.
 Qed.
 
 Theorem either_equal_or_in_set : forall x y s,
@@ -22,7 +22,7 @@ Theorem either_equal_or_in_set : forall x y s,
 Proof.
   intros. destruct (square_equal x y) eqn:E.
   - left. apply square_eq_refl in E. apply E.
-  - right. Search SquareSet.add. apply (@SquareSet.add_3 s y x).
+  - right. apply (@SquareSet.add_3 s y x).
     + intro contra. rewrite square_eq_refl in contra. rewrite contra in E. destruct x; destruct file; destruct rank; discriminate E.
     + apply H.
 Defined.
