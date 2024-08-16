@@ -57,7 +57,6 @@ Proof.
               (moves.SquareMapProp.filter
                  (fun (_ : SquareMap.key) (p : ColoredPiece) =>
                     is_king (piece p) && color_equal turn (color p)) board)) eqn:E; try discriminate.
-  Check OrdSquareMapProp.min_elt_MapsTo.
   destruct p. simpl in H. inversion H; subst; clear H.
   apply OrdSquareMapProp.min_elt_MapsTo in E.
   apply SquareMapProp.filter_iff in E.
