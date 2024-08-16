@@ -1,1 +1,4 @@
--R . chess
+-R src chess
+src/board.v
+src/moves.v
+src/facts.v

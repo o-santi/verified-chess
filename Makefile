@@ -1,17 +1,25 @@
-COQMFFLAGS := -Q . chess
+# KNOWNTARGETS will not be passed along to CoqMakefile
+# KNOWNTARGETS := CoqMakefile extra-stuff extra-stuff2
+# KNOWNFILES will not get implicit targets from the final rule, and so
+# depending on them won't invoke the submake
+# Warning: These files get declared as PHONY, so any targets depending
+# on them always get rebuilt
+KNOWNFILES   := Makefile _CoqProject
 
-ALLVFILES := src/chess.v
+.DEFAULT_GOAL := invoke-coqmakefile
 
-build: Makefile.coq
-	$(MAKE) -f Makefile.coq
+CoqMakefile: Makefile _CoqProject
+	$(COQBIN) coq_makefile -f _CoqProject -o CoqMakefile
 
-clean::
-	if [ -e Makefile.coq ]; then $(MAKE) -f Makefile.coq cleanall; fi
-	$(RM) $(wildcard Makefile.coq Makefile.coq.conf) 
+invoke-coqmakefile: CoqMakefile
+	$(MAKE) --no-print-directory -f CoqMakefile $(filter-out $(KNOWNTARGETS),$(MAKECMDGOALS))
 
-Makefile.coq:
-	coq_makefile $(COQMFFLAGS) -o Makefile.coq $(ALLVFILES)
+.PHONY: invoke-coqmakefile $(KNOWNFILES)
 
--include Makefile.coq
+####################################################################
+##			Your targets here			  ##
+####################################################################
 
-.PHONY: build clean
+# This should be the last rule, to handle any targets not declared above
+%: invoke-coqmakefile
+	@true
