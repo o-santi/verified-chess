@@ -5,6 +5,7 @@ Require Import Program.
 Require Import Lia.
 Require Import board.
 Require Import Coq.FSets.FMapFacts Coq.Structures.OrderedTypeEx.
+Require Import Coq.Relations.Relation_Operators.
 
 Module SquareMapProp := WProperties_fun S SquareMap.
 Module OrdSquareMapProp := OrdProperties SquareMap.
@@ -24,6 +25,11 @@ Definition square_dec_rank (sq: Square) := option_map (fun r => {| file:=sq.(fil
 Definition square_inc_file (sq: Square) := option_map (fun f => {| file:=f; rank:= sq.(rank)|}) (file_inc sq.(file)).
 Definition square_dec_file (sq: Square) := option_map (fun f => {| file:=f; rank:= sq.(rank)|}) (file_dec sq.(file)).
 Definition opt_flatten {A} (o: option (option A)) := match o with Some p => p | None => None end.
+Definition bind {A B} (f: A -> option B) (o: option A) :=
+  match o with
+  | Some x => f x
+  | None => None
+  end.
 
 Definition move_to (d: Direction) (from: Square) :=
   match d with
@@ -31,10 +37,10 @@ Definition move_to (d: Direction) (from: Square) :=
   | Down  => square_dec_rank from
   | Right => square_inc_file from
   | Left  => square_dec_file from
-  | UpRight   => opt_flatten (option_map square_inc_rank (square_inc_file from))
-  | UpLeft    => opt_flatten (option_map square_inc_rank (square_dec_file from))
-  | DownRight => opt_flatten (option_map square_dec_rank (square_inc_file from))
-  | DownLeft  => opt_flatten (option_map square_dec_rank (square_dec_file from))
+  | UpRight   => bind square_inc_rank (square_inc_file from)
+  | UpLeft    => bind square_inc_rank (square_dec_file from)
+  | DownRight => bind square_dec_rank (square_inc_file from)
+  | DownLeft  => bind square_dec_rank (square_dec_file from)
   end.
 
 Definition get_square (b: Board) (sq1: Square) := SquareMap.find sq1 b.
@@ -71,7 +77,8 @@ Definition square_measure d sq :=
   | Down | Left  | DownLeft | DownRight => square_to_nat sq
   end.
 
-Program Fixpoint squares (sq: Square) (d: Direction) { measure (square_measure d sq) } :=
+#[program]
+Fixpoint squares (sq: Square) (d: Direction) { measure (square_measure d sq) } :=
   match (move_to d sq) with
   | Some sq => SquareSet.add sq (squares sq d)
   | None => SquareSet.empty
@@ -140,15 +147,15 @@ Definition attacks (b: Board) (from: Square) : SquareSet.t :=
       fold_left maybe_add squares SquareSet.empty
   | Some {| piece := Horse; color := color |} =>
       let squares :=
-        List.map opt_flatten [
-            option_map square_inc_rank (opt_flatten (option_map square_inc_file (square_inc_file from)));
-            option_map square_dec_rank (opt_flatten (option_map square_inc_file (square_inc_file from)));
-            option_map square_inc_rank (opt_flatten (option_map square_dec_file (square_dec_file from)));
-            option_map square_dec_rank (opt_flatten (option_map square_dec_file (square_dec_file from)));
-            option_map square_inc_file (opt_flatten (option_map square_inc_rank (square_inc_rank from)));
-            option_map square_dec_file (opt_flatten (option_map square_inc_rank (square_inc_rank from)));
-            option_map square_inc_file (opt_flatten (option_map square_dec_rank (square_dec_rank from)));
-            option_map square_dec_file (opt_flatten (option_map square_dec_rank (square_dec_rank from)))
+        [
+            bind square_inc_rank (bind square_inc_file (square_inc_file from));
+            bind square_dec_rank (bind square_inc_file (square_inc_file from));
+            bind square_inc_rank (bind square_dec_file (square_dec_file from));
+            bind square_dec_rank (bind square_dec_file (square_dec_file from));
+            bind square_inc_file (bind square_inc_rank (square_inc_rank from));
+            bind square_dec_file (bind square_inc_rank (square_inc_rank from));
+            bind square_inc_file (bind square_dec_rank (square_dec_rank from));
+            bind square_dec_file (bind square_dec_rank (square_dec_rank from))
           ] in
       fold_left maybe_add squares SquareSet.empty
   | Some {| piece := Rook; color:=color |} => cross b from color
@@ -157,38 +164,38 @@ Definition attacks (b: Board) (from: Square) : SquareSet.t :=
   | _ => SquareSet.empty
   end.
 
-Definition IsAttacked (b: Board) (sq: Square) (turn: Color) :=
-  exists attacker_sq, SquareSet.In attacker_sq (attacks b sq) /\ has_enemy b attacker_sq turn = true.
-
-Definition is_attacked (b: Board) (original_square: Square) (original_color: Color) :=
-  SquareMapProp.exists_
-    (fun sq piece => SquareSet.mem original_square (attacks b sq) && color_equal piece.(color) (invert original_color)) b.
-
-Definition exists_king (b: Board) (turn: Color) := SquareMapProp.exists_ (fun sq p => is_king p.(piece) && color_equal turn p.(color)) b.
-
-Definition get_king (b: Board) (turn: Color) :=
-  option_map fst (OrdSquareMapProp.min_elt (SquareMapProp.filter (fun sq p => is_king p.(piece) && color_equal turn p.(color)) b)).
-
 Record GameState := {
     board : Board;
     player_turn: Color;
     moves: nat;
   }.
 
-Definition is_in_check (game_state: GameState) :=
-  match get_king game_state.(board) game_state.(player_turn) with
-  | Some sq => is_attacked game_state.(board) sq game_state.(player_turn)
+Definition IsAttacked (game_state: GameState) (sq: Square) :=
+  exists attacker_sq, SquareSet.In sq (attacks game_state.(board) attacker_sq) /\ has_enemy (game_state.(board)) attacker_sq game_state.(player_turn) = true.
+
+Definition is_attacked (board: Board) (turn: Color) (square: Square) :=
+  SquareMapProp.exists_
+    (fun sq piece => SquareSet.mem square (attacks board sq) && color_equal piece.(color) (invert turn)) board.
+
+Definition exists_king (game_state: GameState) := SquareMapProp.exists_ (fun sq p => is_king p.(piece) && color_equal game_state.(player_turn) p.(color)) game_state.(board).
+
+Definition get_king (board: Board) (turn: Color) :=
+  option_map fst (OrdSquareMapProp.min_elt (SquareMapProp.filter (fun sq p => is_king p.(piece) && color_equal turn p.(color)) board)).
+
+Definition is_in_check (board: Board) (turn: Color) :=
+  match get_king board turn with
+  | Some sq => is_attacked board turn sq
   | _ => false
   end.
-
 
 Definition valid_moves (game_state: GameState) (from: Square) :=
   let b := game_state.(board) in
   let turn := game_state.(player_turn) in
   match get_square b from with
+  | None => SquareSet.empty
   | Some {| piece:=piece; color := piece_color |} =>
       if negb (color_equal piece_color turn) then SquareSet.empty else
-        match (is_in_check game_state, piece) with
+        match (is_in_check b turn, piece) with
         | (false, Pawn) =>
             let forward := match turn with
                            | White => Up
@@ -213,33 +220,62 @@ Definition valid_moves (game_state: GameState) (from: Square) :=
             end
         | (_, King) =>
             let attack_squares := attacks b from in
-            SquareSet.filter (fun sq => andb (negb (is_attacked b sq turn)) (negb (has_ally b sq turn))) attack_squares
+            SquareSet.filter (fun sq => andb (negb (is_attacked b turn sq)) (negb (has_ally b sq turn))) attack_squares
         | (false, _) =>
             let attack_squares := attacks b from in
             SquareSet.filter (fun sq => negb (has_ally b sq turn)) attack_squares
         | (true, _) => SquareSet.empty
         end
-  | None => SquareSet.empty
   end.
 
-Definition default_board :=
+Definition example_board :=
   SquareMap.add {| file:=D; rank:=R2|} {|piece:=Queen; color:=White|}
     (SquareMap.add {| file:=C; rank:=R3|} {|piece:=Rook; color:=Black |}
        (SquareMap.add {| file:=D; rank:=R4|} {| piece:=Horse; color:=Black|}
-          (SquareMap.add {| file:=B; rank:=R3|} {| piece:=King; color:=Black |}
-             (SquareMap.add {|file:=B; rank:=R2|} {| piece:=Pawn; color :=White |} (SquareMap.empty ColoredPiece))))).
+          (SquareMap.add {|file:=B; rank:=R2|} {| piece:=Pawn; color :=White |} (SquareMap.empty ColoredPiece)))).
 
 
-Inductive game_step : GameState -> Type :=
+Inductive game_step : GameState -> GameState -> Type :=
+| Draw game_state :
+  game_step game_state game_state
+| Stalemate game_state :
+  (forall square, (valid_moves game_state square) = SquareSet.empty) ->
+  is_in_check game_state.(board) game_state.(player_turn) = false ->
+  game_step game_state game_state
 | Checkmate game_state :
   (forall square, (valid_moves game_state square) = SquareSet.empty) ->
-  game_step game_state
-| Movement game_state piece from to:
-  get_square game_state.(board) from = Some {| piece:=piece; color:=game_state.(player_turn)|} ->
+  is_in_check game_state.(board) game_state.(player_turn) = true ->
+  game_step game_state game_state
+| Movement game_state p from to:
+  let new_board := SquareMap.remove from (SquareMap.add to {| piece :=p; color:= game_state.(player_turn)|} game_state.(board)) in
+  get_square game_state.(board) from = Some {| piece:=p; color:=game_state.(player_turn)|} ->
   SquareSet.In to (valid_moves game_state from) ->
-  let new_board := SquareMap.remove from (SquareMap.add to {| piece :=piece; color:= game_state.(player_turn)|} game_state.(board)) in
-  game_step {|
-      board := new_board;
-      player_turn := invert game_state.(player_turn);
-      moves := game_state.(moves) + 1
-    |}.
+  is_in_check new_board game_state.(player_turn) = false ->
+  game_step game_state {|
+              board := new_board;
+              player_turn := invert game_state.(player_turn);
+              moves := game_state.(moves) + 1
+            |}.
+
+Definition example_game :=
+  let game_state :=
+    {| board := example_board;
+      moves := 0;
+      player_turn := White
+    |}
+  in Movement game_state Queen {|file:= D; rank:=R2|} {| file := E; rank := R1|}
+       ltac:(reflexivity) ltac:(apply SquareSet.mem_2; reflexivity) ltac:(reflexivity).
+
+Compute example_game.
+
+Inductive ValidGame: GameState -> GameState -> Type :=
+| game_end : forall (x : GameState),
+    game_step x x -> ValidGame x x
+| game_next : forall (x y z : GameState),
+    game_step x y ->
+    ValidGame y z ->
+    ValidGame x z.
+
+
+
+

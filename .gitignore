@@ -5,5 +5,7 @@ src/*.aux
 src/*.glob
 src/*.vos
 src/*.vok
+src/.*
+*CoqMakefile*
 Makefile.coq
 Makefile.coq.conf

@@ -2,3 +2,4 @@
 src/board.v
 src/moves.v
 src/facts.v
+src/pgn.v

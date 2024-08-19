@@ -62,7 +62,7 @@ Proof.
   - unfold file_equal in H0. destruct f1; destruct f2; try discriminate; reflexivity.
   - destruct H0. unfold file_equal. destruct f1; reflexivity.
 Defined.
-
+    
 Theorem rank_eq_refl : forall r1 r2, (rank_equal r1 r2 = true) <-> r1 = r2.
 Proof.
   split; intros.
