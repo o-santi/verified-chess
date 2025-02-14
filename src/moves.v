@@ -164,20 +164,14 @@ Definition attacks (b: Board) (from: Square) : SquareSet.t :=
   | _ => SquareSet.empty
   end.
 
-Record GameState := {
-    board : Board;
-    player_turn: Color;
-    moves: nat;
-  }.
-
-Definition IsAttacked (game_state: GameState) (sq: Square) :=
-  exists attacker_sq, SquareSet.In sq (attacks game_state.(board) attacker_sq) /\ has_enemy (game_state.(board)) attacker_sq game_state.(player_turn) = true.
+Definition IsAttacked (board: Board) (turn: Color) (sq: Square) :=
+  exists attacker_sq, SquareSet.In sq (attacks board attacker_sq) /\ has_enemy board attacker_sq turn = true.
 
 Definition is_attacked (board: Board) (turn: Color) (square: Square) :=
   SquareMapProp.exists_
     (fun sq piece => SquareSet.mem square (attacks board sq) && color_equal piece.(color) (invert turn)) board.
 
-Definition exists_king (game_state: GameState) := SquareMapProp.exists_ (fun sq p => is_king p.(piece) && color_equal game_state.(player_turn) p.(color)) game_state.(board).
+Definition exists_king (board: Board) (turn: Color) := SquareMapProp.exists_ (fun sq p => is_king p.(piece) && color_equal turn p.(color)) board.
 
 Definition get_king (board: Board) (turn: Color) :=
   option_map fst (OrdSquareMapProp.min_elt (SquareMapProp.filter (fun sq p => is_king p.(piece) && color_equal turn p.(color)) board)).
@@ -188,14 +182,12 @@ Definition is_in_check (board: Board) (turn: Color) :=
   | _ => false
   end.
 
-Definition valid_moves (game_state: GameState) (from: Square) :=
-  let b := game_state.(board) in
-  let turn := game_state.(player_turn) in
-  match get_square b from with
+Definition valid_moves (board: Board) (turn: Color) (from: Square) :=
+  match get_square board from with
   | None => SquareSet.empty
   | Some {| piece:=piece; color := piece_color |} =>
       if negb (color_equal piece_color turn) then SquareSet.empty else
-        match (is_in_check b turn, piece) with
+        match (is_in_check board turn, piece) with
         | (false, Pawn) =>
             let forward := match turn with
                            | White => Up
@@ -204,26 +196,26 @@ Definition valid_moves (game_state: GameState) (from: Square) :=
             match move_to forward from with
             | Some forward_square =>
                 let forward_movement :=
-                  if square_empty b forward_square then
+                  if square_empty board forward_square then
                     let (start_rank, jump_rank) := double_movement turn in
                     let goal := {| file:= from.(file); rank :=jump_rank; |} in
                     let double :=
-                      if andb (rank_equal from.(rank) start_rank) (square_empty b goal) then
+                      if andb (rank_equal from.(rank) start_rank) (square_empty board goal) then
                         SquareSet.add goal SquareSet.empty
                       else
                         SquareSet.empty in
                     SquareSet.add forward_square double
                   else SquareSet.empty in
-                let pawn_attacks := SquareSet.filter (fun sq => has_enemy b sq turn) (attacks b from) in
+                let pawn_attacks := SquareSet.filter (fun sq => has_enemy board sq turn) (attacks board from) in
                 SquareSet.union pawn_attacks forward_movement
             | None => SquareSet.empty
             end
         | (_, King) =>
-            let attack_squares := attacks b from in
-            SquareSet.filter (fun sq => andb (negb (is_attacked b turn sq)) (negb (has_ally b sq turn))) attack_squares
+            let attack_squares := attacks board from in
+            SquareSet.filter (fun sq => andb (negb (is_attacked board turn sq)) (negb (has_ally board sq turn))) attack_squares
         | (false, _) =>
-            let attack_squares := attacks b from in
-            SquareSet.filter (fun sq => negb (has_ally b sq turn)) attack_squares
+            let attack_squares := attacks board from in
+            SquareSet.filter (fun sq => negb (has_ally board sq turn)) attack_squares
         | (true, _) => SquareSet.empty
         end
   end.
@@ -234,48 +226,21 @@ Definition example_board :=
        (SquareMap.add {| file:=D; rank:=R4|} {| piece:=Horse; color:=Black|}
           (SquareMap.add {|file:=B; rank:=R2|} {| piece:=Pawn; color :=White |} (SquareMap.empty ColoredPiece)))).
 
-
-Inductive game_step : GameState -> GameState -> Type :=
-| Draw game_state :
-  game_step game_state game_state
-| Stalemate game_state :
-  (forall square, (valid_moves game_state square) = SquareSet.empty) ->
-  is_in_check game_state.(board) game_state.(player_turn) = false ->
-  game_step game_state game_state
-| Checkmate game_state :
-  (forall square, (valid_moves game_state square) = SquareSet.empty) ->
-  is_in_check game_state.(board) game_state.(player_turn) = true ->
-  game_step game_state game_state
-| Movement game_state p from to:
-  let new_board := SquareMap.remove from (SquareMap.add to {| piece :=p; color:= game_state.(player_turn)|} game_state.(board)) in
-  get_square game_state.(board) from = Some {| piece:=p; color:=game_state.(player_turn)|} ->
-  SquareSet.In to (valid_moves game_state from) ->
-  is_in_check new_board game_state.(player_turn) = false ->
-  game_step game_state {|
-              board := new_board;
-              player_turn := invert game_state.(player_turn);
-              moves := game_state.(moves) + 1
-            |}.
-
+Inductive Match : forall (turn: Color) (board: Board), Prop :=
+| NoMoreMoves : forall turn board,
+    (forall square, (valid_moves board turn square) = SquareSet.empty) ->
+    Match turn board
+| Movement piece from to : forall turn board, 
+  let new_board := SquareMap.remove from (SquareMap.add to {| piece := piece; color:= turn|} board) in
+  get_square board from = Some {| piece:=piece; color:=turn|} ->
+  SquareSet.In to (valid_moves board turn from) ->
+  is_in_check new_board turn = false ->
+  Match (invert turn) new_board.
+                    
 Definition example_game :=
-  let game_state :=
-    {| board := example_board;
-      moves := 0;
-      player_turn := White
-    |}
-  in Movement game_state Queen {|file:= D; rank:=R2|} {| file := E; rank := R1|}
+  Movement Queen {|file:= D; rank:=R2|} {| file := E; rank := R1|} White example_board
        ltac:(reflexivity) ltac:(apply SquareSet.mem_2; reflexivity) ltac:(reflexivity).
 
 Compute example_game.
 
-Inductive ValidGame: GameState -> GameState -> Type :=
-| game_end : forall (x : GameState),
-    game_step x x -> ValidGame x x
-| game_next : forall (x y z : GameState),
-    game_step x y ->
-    ValidGame y z ->
-    ValidGame x z.
-
-
-
-
+Check example_game.

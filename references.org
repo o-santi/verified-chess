@@ -1,0 +1,3 @@
+- [[https://archive.ceciis.foi.hr/index.php/ceciis/2008/paper/download/174/174-367-1-PB.pdf][A formal system for automated reasoning about retrograde chess problems using Coq]]
+- [[https://www.researchgate.net/profile/Predrag-Janicic-2/publication/266372219_Formalization_of_a_Strategy_for_the_KRK_Chess_Endgame/links/54f997cc0cf210398e990135/Formalization-of-a-Strategy-for-the-KRK-Chess-Endgame.pdf][Formalization of a Strategy for the KRK Chess Endgame]]
+- [[https://argo.matf.bg.ac.rs/publications/2015/krk-cade.pdf][Proving Correctness of a KRK Chess Endgame Strategy by using Isabelle/HOL and Z3]]
