@@ -179,19 +179,19 @@ Definition parse_san : @parser SAN :=
       end in
     Ok ({| piece := p; captures := is_some captures; from_file:=f; from_rank:=r; to:=sq; check:= is_some check |}, rest).
 
-Fixpoint parse_game (game_state: GameState) (gas: nat) (s: list nat) : @Result (ValidGame game_state) :=
-  match gas with
-  | S g =>
-      let* (_, rest)      := expect_string (writeNat turn) s in
-      let* (_, rest)      := expect_char "." rest in
-      let* (_, rest)      := whitespace rest in
-      let* (w_move, rest) := parse_san rest in
-      let* (_, rest)      := whitespace rest in
-      let* (b_move, rest) := parse_san rest in
-      let* (_, rest)      := whitespace rest in
-      let* (games, rest)  := parse_game (turn + 1) g rest in
-      Ok ((w_move, b_move)::games, rest)
-  | 0 => Ok ([], s)
-  end.
+(* Fixpoint parse_game (board: Board) (turn: Color) (gas: nat) (s: list nat) : @Result (Match (invert turn) board) := *)
+(*   match gas with *)
+(*   | S g => *)
+(*       let* (_, rest)      := expect_string (writeNat turn) s in *)
+(*       let* (_, rest)      := expect_char "." rest in *)
+(*       let* (_, rest)      := whitespace rest in *)
+(*       let* (w_move, rest) := parse_san rest in *)
+(*       let* (_, rest)      := whitespace rest in *)
+(*       let* (b_move, rest) := parse_san rest in *)
+(*       let* (_, rest)      := whitespace rest in *)
+(*       let* (games, rest)  := parse_game (turn + 1) g rest in *)
+(*       Ok ((w_move, b_move)::games, rest) *)
+(*   | 0 => Ok ([], s) *)
+(*   end. *)
 
-Compute (parse_game 1 4 (to_list "1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6")).
+(* Compute (parse_game 1 4 (to_list "1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6")). *)
