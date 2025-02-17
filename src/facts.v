@@ -34,21 +34,6 @@ Proof.
   - apply set_is_empty in H. destruct H.
 Defined.
 
-
-Theorem king_cant_move_into_attack : forall board turn (from to : Square),
-    get_square board from = Some {| piece:=King; color:= turn |} ->
-    SquareSet.In to (valid_moves board turn from) ->
-    is_attacked board turn to = false.
-Proof.
-  intros.
-  unfold valid_moves in H0. simpl in H0. rewrite H in H0. rewrite color_eq_refl in H0. 
-  destruct (is_in_check board turn); apply SquareSet.filter_2 in H0;
-    try (apply andb_prop in H0; destruct H0; apply negb_true_iff in H0; apply H0);
-    unfold compat_bool; unfold Proper; unfold "==>"; intros; rewrite square_eq_refl in H1; destruct H1; reflexivity.
-Defined.
-
-Check king_cant_move_into_attack.
-
 Theorem get_king_correct : forall board turn square,
     get_king board turn = Some square ->
     get_square board square = Some {| piece := King; color := turn |}.
@@ -75,19 +60,6 @@ Proof.
   intros. unfold is_in_check in H. destruct (get_king board turn) as [sq|] eqn:King; try discriminate.
   exists sq. apply get_king_correct in King. apply King.
 Defined.
-
-Theorem if_in_check_then_can_only_move_king : forall board turn from to,
-    is_in_check board turn = true ->
-    SquareSet.In to (valid_moves board turn from) ->
-    get_square board from = Some {| piece:= King; color:= turn|}.
-Proof.
-  intros.
-  unfold valid_moves in H0. rewrite H in H0. unfold is_in_check in H.
-  destruct (get_king board turn) in H; try discriminate.
-  destruct (get_square board from).
-  - destruct c. destruct (color_equal color turn) eqn:C; destruct piece eqn:P; try (apply set_is_empty in H0; destruct H0). simpl in H0. destruct color; destruct turn; try discriminate; reflexivity.
-  - apply set_is_empty in H0. destruct H0.
-Qed.
 
 Theorem is_attacked_correct : forall board turn sq,
     IsAttacked board turn sq <-> is_attacked board turn sq = true.
@@ -119,4 +91,3 @@ Proof.
   - unfold is_in_check in H0. rewrite H in H0. apply H0.
   - unfold is_in_check. rewrite H. apply H0.
 Defined.
-

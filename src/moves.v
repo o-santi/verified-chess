@@ -187,8 +187,8 @@ Definition valid_moves (board: Board) (turn: Color) (from: Square) :=
   | None => SquareSet.empty
   | Some {| piece:=piece; color := piece_color |} =>
       if negb (color_equal piece_color turn) then SquareSet.empty else
-        match (is_in_check board turn, piece) with
-        | (false, Pawn) =>
+        match piece with
+        | Pawn =>
             let forward := match turn with
                            | White => Up
                            | Black => Down
@@ -210,13 +210,9 @@ Definition valid_moves (board: Board) (turn: Color) (from: Square) :=
                 SquareSet.union pawn_attacks forward_movement
             | None => SquareSet.empty
             end
-        | (_, King) =>
-            let attack_squares := attacks board from in
-            SquareSet.filter (fun sq => andb (negb (is_attacked board turn sq)) (negb (has_ally board sq turn))) attack_squares
-        | (false, _) =>
+        | _ =>
             let attack_squares := attacks board from in
             SquareSet.filter (fun sq => negb (has_ally board sq turn)) attack_squares
-        | (true, _) => SquareSet.empty
         end
   end.
 
@@ -236,7 +232,7 @@ Inductive Match : forall (turn: Color) (board: Board), Prop :=
   SquareSet.In to (valid_moves board turn from) ->
   is_in_check new_board turn = false ->
   Match (invert turn) new_board.
-                    
+
 Definition example_game :=
   Movement Queen {|file:= D; rank:=R2|} {| file := E; rank := R1|} White example_board
        ltac:(reflexivity) ltac:(apply SquareSet.mem_2; reflexivity) ltac:(reflexivity).
