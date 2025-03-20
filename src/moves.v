@@ -216,27 +216,58 @@ Definition valid_moves (board: Board) (turn: Color) (from: Square) :=
         end
   end.
 
-Definition example_board :=
-  SquareMap.add {| file:=D; rank:=R2|} {|piece:=Queen; color:=White|}
-    (SquareMap.add {| file:=C; rank:=R3|} {|piece:=Rook; color:=Black |}
-       (SquareMap.add {| file:=D; rank:=R4|} {| piece:=Horse; color:=Black|}
-          (SquareMap.add {|file:=B; rank:=R2|} {| piece:=Pawn; color :=White |} (SquareMap.empty ColoredPiece)))).
+Definition play_move piece from to board turn :=
+  SquareMap.remove from (SquareMap.add to {| piece := piece; color:= turn|} board).
+
+
+Definition is_valid_move piece from to board turn :=
+  let new_board := play_move piece from to board turn in
+  get_square board from = Some {| piece:=piece; color:=turn|} /\
+    SquareSet.mem to (valid_moves board turn from) = true /\
+    is_in_check new_board turn = false.
 
 Inductive Match : forall (turn: Color) (board: Board), Prop :=
 | NoMoreMoves : forall turn board,
     (forall square, (valid_moves board turn square) = SquareSet.empty) ->
     Match turn board
-| Movement piece from to : forall turn board, 
-  let new_board := SquareMap.remove from (SquareMap.add to {| piece := piece; color:= turn|} board) in
-  get_square board from = Some {| piece:=piece; color:=turn|} ->
-  SquareSet.In to (valid_moves board turn from) ->
-  is_in_check new_board turn = false ->
-  Match (invert turn) new_board.
+| Movement piece from to : forall turn board,
+    is_valid_move piece from to board turn ->
+    let new_board := play_move piece from to board turn in
+    Match (invert turn) new_board.
+
+Fixpoint Mate_in (n: nat) : forall (turn: Color) (board: Board), Prop := fun turn board =>
+  match n with
+  | 0 => forall square, (valid_moves board (invert turn) square) = SquareSet.empty
+  | S pred => exists piece from to,
+      is_valid_move piece from to board turn ->
+      let their_board := play_move piece from to board turn in
+      forall op_piece op_from op_to,
+        let our_board := play_move op_piece op_from op_to their_board (invert turn) in
+        is_valid_move op_piece op_from op_to their_board (invert turn) ->
+        Mate_in pred turn our_board
+  end.
+
+Definition example_board :=
+  SquareMap.add {| file:=D; rank:=R1|} {|piece:= King; color:= White|}
+    (SquareMap.add {| file:=A; rank:=R3|} {|piece:= Queen; color:= Black |}
+       (SquareMap.add {|file:=D; rank:=R3|} {| piece:=King; color := Black |} (SquareMap.empty ColoredPiece))).
 
 Definition example_game :=
-  Movement Queen {|file:= D; rank:=R2|} {| file := E; rank := R1|} White example_board
-       ltac:(reflexivity) ltac:(apply SquareSet.mem_2; reflexivity) ltac:(reflexivity).
+  Movement Queen {|file:= A; rank:=R3|} {| file := A; rank := R1|} Black example_board
+    ltac:(unfold is_valid_move; split; split; reflexivity).
 
-Compute example_game.
+Theorem is_in_mate_in_1 : Mate_in 1 Black example_board.
+Proof.
+  unfold Mate_in.
+  exists Queen, {| file:=A; rank:=R3;|}, {| file:=A; rank:=R1;|}.
+  intros.
+  simpl in *.
+  destruct op_piece; unfold is_valid_move in H0; destruct H0 as [H1 [H2 H3]]; unfold get_square in H1; unfold play_move in H1; destruct op_from; destruct file, rank; try discriminate H1.
+  destruct op_to, file, rank; try discriminate H2;
+  replace (is_in_check
+         (play_move King {| file := D; rank := R1 |} _
+            (play_move Queen {| file := A; rank := R3 |} {| file := A; rank := R1 |} example_board Black)
+            White) White) with true in H3; discriminate H3.
+Defined.
 
-Check example_game.
+Search SquareMap.t.
