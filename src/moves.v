@@ -264,10 +264,5 @@ Proof.
   simpl in *.
   destruct op_piece; unfold is_valid_move in H0; destruct H0 as [H1 [H2 H3]]; unfold get_square in H1; unfold play_move in H1; destruct op_from; destruct file, rank; try discriminate H1.
   destruct op_to, file, rank; try discriminate H2;
-  replace (is_in_check
-         (play_move King {| file := D; rank := R1 |} _
-            (play_move Queen {| file := A; rank := R3 |} {| file := A; rank := R1 |} example_board Black)
-            White) White) with true in H3; discriminate H3.
+  replace (is_in_check _ White) with true in H3; discriminate H3.
 Defined.
-
-Search SquareMap.t.
