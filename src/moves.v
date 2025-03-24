@@ -292,6 +292,14 @@ Fixpoint Mate_in (n: nat) : forall (board: Board) (turn: Color), Prop := fun boa
         Mate_in pred our_board turn)
   end.
 
+Ltac foreach_square sq :=
+  repeat match type of sq with
+    | (_ /\ _) \/ ?other => destruct sq as [[square_eq piece_eq] | sq]; [ try discriminate; inversion piece_eq; subst; clear piece_eq | foreach_square sq]
+    | SquareMap.MapsTo ?sq1 ?piece1 (SquareMap.add ?sq2 ?piece2 ?board)  => apply board_disjunct in sq
+    | SquareMap.MapsTo _ _ (SquareMap.remove _ _) => apply SquareMap.remove_3 in sq
+    | SquareMap.MapsTo _ _ (SquareMap.empty _) => apply SquareMapProp.F.empty_mapsto_iff in sq; destruct sq
+    end.
+
 Definition example_board :=
   SquareMap.add {| file:=F; rank:=R1|} {|piece:= King; color:= White|}
     (SquareMap.add {| file:=D; rank:=R2|} {|piece:= Queen; color:= Black |}
@@ -307,7 +315,7 @@ Proof.
   exists Queen, {| file:=D; rank:=R2;|}, {| file:=D; rank:=R1;|}.
   intros.
   simpl in *.
-  unfold for_all_valid_moves_from, for_all_pieces_in_board. simpl.
+  unfold for_all_valid_moves_from, for_all_pieces_in_board.
   apply SquareMapProp.fold_rec_nodep.
   auto.
   intros square color_piece P square_in_board acc. split.
@@ -318,9 +326,7 @@ Proof.
   rewrite (SquareMap.find_1 square_in_board).
   unfold example_board in square_in_board.
   unfold play_move in square_in_board; simpl in square_in_board.
-  apply SquareMap.remove_3 in square_in_board.
-  repeat (apply board_disjunct in square_in_board; destruct square_in_board as [[square_eq piece_eq] | square_in_board]; try discriminate; try (apply SquareMapProp.F.empty_mapsto_iff in square_in_board; destruct square_in_board)).
-  inversion piece_eq; subst; clear piece_eq.
+  foreach_square square_in_board.
   apply SquareSetProp.fold_rec_nodep.
   split; auto.
   intros.
@@ -330,10 +336,9 @@ Defined.
 Theorem is_in_mate_in_2 : Mate_in 2 example_board Black.
 Proof.
   unfold Mate_in.
-  unfold Mate_in.
-  exists Queen, {| file:=D; rank:=R2;|}, {| file:=D; rank:=R1;|}.
+  exists King, {| file:=F; rank:=R3;|}, {| file:=G; rank:=R3;|}.
   intros.
-  simpl in *.
+  simpl.
   unfold for_all_valid_moves_from, for_all_pieces_in_board. simpl.
   apply SquareMapProp.fold_rec_nodep.
   auto.
@@ -345,10 +350,8 @@ Proof.
   rewrite (SquareMap.find_1 square_in_board).
   unfold example_board in square_in_board.
   unfold play_move in square_in_board; simpl in square_in_board.
-  apply SquareMap.remove_3 in square_in_board.
-  repeat (apply board_disjunct in square_in_board; destruct square_in_board as [[square_eq piece_eq] | square_in_board]; try discriminate; try (apply SquareMapProp.F.empty_mapsto_iff in square_in_board; destruct square_in_board)).
+  foreach_square square_in_board.
+  apply SquareSetProp.fold_rec_nodep. { simpl. auto. }
+  intros.
+Defined.
   
-  
-
-Check is_in_mate_in_1.
-Extraction attacks.
