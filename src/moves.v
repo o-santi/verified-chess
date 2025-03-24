@@ -1,14 +1,17 @@
 Require Import Coq.Lists.List.
+Require Import Coq.Bool.Bool.
 Import ListNotations.
 Require Import Coq.Init.Datatypes.
 Require Import Program.
 Require Import Lia.
 Require Import board.
-Require Import Coq.FSets.FMapFacts Coq.Structures.OrderedTypeEx.
+Require Coq.FSets.FMapFacts.
+Require Coq.FSets.FSetProperties.
 Require Import Coq.Relations.Relation_Operators.
 
-Module SquareMapProp := WProperties_fun S SquareMap.
-Module OrdSquareMapProp := OrdProperties SquareMap.
+Module SquareMapProp := Coq.FSets.FMapFacts.WProperties_fun S SquareMap.
+Module SquareSetProp := Coq.FSets.FSetProperties.WProperties_fun S SquareSet.
+Module OrdSquareMapProp := Coq.FSets.FMapFacts.OrdProperties SquareMap.
 
 Inductive Direction :=
 | Up
@@ -169,7 +172,7 @@ Definition IsAttacked (board: Board) (turn: Color) (sq: Square) :=
 
 Definition is_attacked (board: Board) (turn: Color) (square: Square) :=
   SquareMapProp.exists_
-    (fun sq piece => SquareSet.mem square (attacks board sq) && color_equal piece.(color) (invert turn)) board.
+    (fun sq piece => (SquareSet.mem square (attacks board sq)) && (color_equal piece.(color) (invert turn))) board.
 
 Definition exists_king (board: Board) (turn: Color) := SquareMapProp.exists_ (fun sq p => is_king p.(piece) && color_equal turn p.(color)) board.
 
@@ -182,7 +185,7 @@ Definition is_in_check (board: Board) (turn: Color) :=
   | _ => false
   end.
 
-Definition valid_moves (board: Board) (turn: Color) (from: Square) :=
+Definition possible_moves (board: Board) (turn: Color) (from: Square) :=
   match get_square board from with
   | None => SquareSet.empty
   | Some {| piece:=piece; color := piece_color |} =>
@@ -219,50 +222,133 @@ Definition valid_moves (board: Board) (turn: Color) (from: Square) :=
 Definition play_move piece from to board turn :=
   SquareMap.remove from (SquareMap.add to {| piece := piece; color:= turn|} board).
 
-
 Definition is_valid_move piece from to board turn :=
   let new_board := play_move piece from to board turn in
   get_square board from = Some {| piece:=piece; color:=turn|} /\
-    SquareSet.mem to (valid_moves board turn from) = true /\
+    SquareSet.mem to (possible_moves board turn from) = true /\
     is_in_check new_board turn = false.
+
+Definition valid_moves (board: Board) turn from piece :=
+  SquareSet.filter
+    (fun to =>
+       let new_board := play_move piece from to board turn in
+       negb (is_in_check new_board turn)) (possible_moves board turn from).
+
+
+Definition for_all_pieces_in_board (board: Board) (f: Square -> ColoredPiece -> Prop) :=
+  SquareMap.fold (fun key element acc => acc /\ (f key element)) board True.
+
+Definition no_more_moves (board: Board) (turn: Color) :=
+  for_all_pieces_in_board board
+    (fun from colored_piece =>
+       let (piece, color) := colored_piece in
+       if color_equal color turn then
+         valid_moves board turn from piece = SquareSet.empty
+       else
+         True).
+
+Definition for_all_valid_moves_from (board: Board) (turn: Color)
+  (f: Piece -> Square -> Square -> Prop) :=
+  for_all_pieces_in_board board
+    (fun from piece =>
+       let (from_piece, from_color) := piece in
+       if color_equal from_color turn then
+         let valid_moves_from := valid_moves board turn from from_piece in
+         SquareSet.fold (fun to acc => acc /\ f from_piece from to) valid_moves_from True
+       else
+         True).
 
 Inductive Match : forall (turn: Color) (board: Board), Prop :=
 | NoMoreMoves : forall turn board,
-    (forall square, (valid_moves board turn square) = SquareSet.empty) ->
+    no_more_moves board turn ->
     Match turn board
 | Movement piece from to : forall turn board,
     is_valid_move piece from to board turn ->
     let new_board := play_move piece from to board turn in
     Match (invert turn) new_board.
 
-Fixpoint Mate_in (n: nat) : forall (turn: Color) (board: Board), Prop := fun turn board =>
+Definition board_disjunct : forall (sq add_sq: Square) (colored_piece add_colored_piece: ColoredPiece) board,
+    SquareMap.MapsTo sq colored_piece (SquareMap.add add_sq add_colored_piece board)
+    -> (sq = add_sq /\ colored_piece = add_colored_piece) \/
+        SquareMap.MapsTo sq colored_piece board.
+Proof.
+  intros.
+  apply SquareMap.find_1 in H.
+  rewrite SquareMapProp.F.add_o in H.
+  destruct (SquareSet.MF.eq_dec add_sq sq) eqn: SqEqual.
+  - left. inversion H. symmetry in H1. split. { symmetry. rewrite <- square_eq_refl. apply e. } { reflexivity. }
+  - right. apply SquareMap.find_2 in H. apply H.
+Defined.
+
+Fixpoint Mate_in (n: nat) : forall (board: Board) (turn: Color), Prop := fun board turn =>
   match n with
-  | 0 => forall square, (valid_moves board (invert turn) square) = SquareSet.empty
+  | 0 => no_more_moves board (invert turn) /\ is_in_check board (invert turn) = true
   | S pred => exists piece from to,
       is_valid_move piece from to board turn ->
+      let their_turn := invert turn in
       let their_board := play_move piece from to board turn in
-      forall op_piece op_from op_to,
-        let our_board := play_move op_piece op_from op_to their_board (invert turn) in
-        is_valid_move op_piece op_from op_to their_board (invert turn) ->
-        Mate_in pred turn our_board
+      for_all_valid_moves_from their_board their_turn (fun op_piece op_from op_to =>
+        let our_board := play_move op_piece op_from op_to their_board their_turn in
+        Mate_in pred our_board turn)
   end.
 
 Definition example_board :=
-  SquareMap.add {| file:=D; rank:=R1|} {|piece:= King; color:= White|}
-    (SquareMap.add {| file:=A; rank:=R3|} {|piece:= Queen; color:= Black |}
-       (SquareMap.add {|file:=D; rank:=R3|} {| piece:=King; color := Black |} (SquareMap.empty ColoredPiece))).
+  SquareMap.add {| file:=F; rank:=R1|} {|piece:= King; color:= White|}
+    (SquareMap.add {| file:=D; rank:=R2|} {|piece:= Queen; color:= Black |}
+       (SquareMap.add {|file:=F; rank:=R3|} {| piece:=King; color := Black |} (SquareMap.empty ColoredPiece))).
 
 Definition example_game :=
-  Movement Queen {|file:= A; rank:=R3|} {| file := A; rank := R1|} Black example_board
+  Movement Queen {|file:= D; rank:=R2|} {| file := D; rank := R1|} Black example_board
     ltac:(unfold is_valid_move; split; split; reflexivity).
 
-Theorem is_in_mate_in_1 : Mate_in 1 Black example_board.
+Theorem is_in_mate_in_1 : Mate_in 1 example_board Black.
 Proof.
   unfold Mate_in.
-  exists Queen, {| file:=A; rank:=R3;|}, {| file:=A; rank:=R1;|}.
+  exists Queen, {| file:=D; rank:=R2;|}, {| file:=D; rank:=R1;|}.
   intros.
   simpl in *.
-  destruct op_piece; unfold is_valid_move in H0; destruct H0 as [H1 [H2 H3]]; unfold get_square in H1; unfold play_move in H1; destruct op_from; destruct file, rank; try discriminate H1.
-  destruct op_to, file, rank; try discriminate H2;
-  replace (is_in_check _ White) with true in H3; discriminate H3.
+  unfold for_all_valid_moves_from, for_all_pieces_in_board. simpl.
+  apply SquareMapProp.fold_rec_nodep.
+  auto.
+  intros square color_piece P square_in_board acc. split.
+  apply acc.
+  destruct color_piece.
+  destruct color. 2: { simpl. auto. }
+  unfold valid_moves, possible_moves, get_square.
+  rewrite (SquareMap.find_1 square_in_board).
+  unfold example_board in square_in_board.
+  unfold play_move in square_in_board; simpl in square_in_board.
+  apply SquareMap.remove_3 in square_in_board.
+  repeat (apply board_disjunct in square_in_board; destruct square_in_board as [[square_eq piece_eq] | square_in_board]; try discriminate; try (apply SquareMapProp.F.empty_mapsto_iff in square_in_board; destruct square_in_board)).
+  inversion piece_eq; subst; clear piece_eq.
+  apply SquareSetProp.fold_rec_nodep.
+  split; auto.
+  intros.
+  apply SquareSetProp.FM.empty_iff in H0. destruct H0.
 Defined.
+
+Theorem is_in_mate_in_2 : Mate_in 2 example_board Black.
+Proof.
+  unfold Mate_in.
+  unfold Mate_in.
+  exists Queen, {| file:=D; rank:=R2;|}, {| file:=D; rank:=R1;|}.
+  intros.
+  simpl in *.
+  unfold for_all_valid_moves_from, for_all_pieces_in_board. simpl.
+  apply SquareMapProp.fold_rec_nodep.
+  auto.
+  intros square color_piece P square_in_board acc. split.
+  apply acc.
+  destruct color_piece.
+  destruct color. 2: { simpl. auto. }
+  unfold valid_moves, possible_moves, get_square.
+  rewrite (SquareMap.find_1 square_in_board).
+  unfold example_board in square_in_board.
+  unfold play_move in square_in_board; simpl in square_in_board.
+  apply SquareMap.remove_3 in square_in_board.
+  repeat (apply board_disjunct in square_in_board; destruct square_in_board as [[square_eq piece_eq] | square_in_board]; try discriminate; try (apply SquareMapProp.F.empty_mapsto_iff in square_in_board; destruct square_in_board)).
+  
+  
+
+Check is_in_mate_in_1.
+Extraction attacks.
