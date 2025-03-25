@@ -292,12 +292,61 @@ Fixpoint Mate_in (n: nat) : forall (board: Board) (turn: Color), Prop := fun boa
         Mate_in pred our_board turn)
   end.
 
-Ltac foreach_square sq :=
-  repeat match type of sq with
-    | (_ /\ _) \/ ?other => destruct sq as [[square_eq piece_eq] | sq]; [ try discriminate; inversion piece_eq; subst; clear piece_eq | foreach_square sq]
-    | SquareMap.MapsTo ?sq1 ?piece1 (SquareMap.add ?sq2 ?piece2 ?board)  => apply board_disjunct in sq
-    | SquareMap.MapsTo _ _ (SquareMap.remove _ _) => apply SquareMap.remove_3 in sq
-    | SquareMap.MapsTo _ _ (SquareMap.empty _) => apply SquareMapProp.F.empty_mapsto_iff in sq; destruct sq
+Ltac for_all_possible_squares P :=
+  repeat match type of P with
+    | (_ /\ _) \/ ?other => destruct P as [[square_eq piece_eq] | P]; [ subst; simpl | try for_all_possible_squares other]
+    | SquareMap.MapsTo ?sq1 ?piece1 (SquareMap.add ?sq2 ?piece2 ?board)  => apply board_disjunct in P
+    | SquareMap.MapsTo _ _ (SquareMap.remove _ _) => apply SquareMap.remove_3 in P
+    | SquareMap.MapsTo _ _ (SquareMap.empty _) => apply SquareMapProp.F.empty_mapsto_iff in P; destruct P
+    | SquareMap.MapsTo _ _ (play_move _ _ _ _ _) => unfold play_move in P
+    end.
+
+
+(* SquareSet.In square *)
+(*   (SquareSet.add {| file := G; rank := R2 |} *)
+(*      (SquareSet.add {| file := E; rank := R2 |} *)
+(*         (SquareSet.add {| file := G; rank := R1 |} *)
+(*            (SquareSet.add {| file := E; rank := R1 |} (SquareSet.add {| file := F; rank := R2 |} SquareSet.empty))))) *)
+
+Definition squareset_disjunct : forall (sq add_sq: Square) moves,
+    SquareSet.In sq (SquareSet.add add_sq moves)
+    -> (sq = add_sq) \/ SquareSet.In sq moves.
+Proof.
+  intros.
+  destruct (square_equal sq add_sq) eqn: E. apply square_eq_refl in E.
+  - left. apply E.
+  - apply SquareSet.add_3 in H. right. apply H.
+    intro. apply square_eq_refl in H0. symmetry in H0. rewrite <- square_eq_refl in H0. rewrite H0 in E. discriminate.
+Defined.
+  
+
+Ltac for_each_possible_response P :=
+  repeat match type of P with
+    | SquareSet.In ?sq SquareSet.empty => apply SquareSetProp.FM.empty_iff in P; contradiction P
+    | SquareSet.In ?sq (SquareSet.add ?add_sq _) =>
+        apply squareset_disjunct in P as [ eq | rest]; [ try discriminate | for_each_possible_response rest ]
+    | SquareSet.In ?sq (valid_moves _ _ _ _) =>
+        apply SquareSetProp.Dec.F.filter_iff in P as [is_possible_move is_valid]; [
+          apply SquareSetProp.Dec.F.filter_iff in is_possible_move as [is_attack no_ally] ; [
+            unfold attacks in is_attack; simpl in is_attack; for_each_possible_response is_attack
+          | admit ] | admit ]
+    end.
+
+Ltac for_each_valid_move :=
+  repeat match goal with
+    | [ |- True ] => auto
+    | [ |- context [for_all_valid_moves_from ?f ?turn ?pred] ] =>
+        unfold for_all_valid_moves_from, for_all_pieces_in_board
+    | [ |- SquareMap.fold ?f ?board ?acc] =>
+        apply SquareMapProp.fold_rec_nodep
+    | [ |- forall k e a, SquareMap.MapsTo k e ?board -> a -> a /\ _] =>
+        intros square color_piece P square_in_board acc;
+        split; [ apply acc | for_all_possible_squares square_in_board ]
+    | [ |- forall to_sq a, SquareSet.In _ _ -> a -> a /\ _] =>
+        intros  square acc_pred square_is_in_valid_moves acc1;
+        split; [ apply acc1 | for_each_possible_response square_is_in_valid_moves ]
+    | [ |- SquareSet.fold _ _ _ ] =>
+        apply SquareSetProp.fold_rec_nodep
     end.
 
 Definition example_board :=
@@ -313,45 +362,23 @@ Theorem is_in_mate_in_1 : Mate_in 1 example_board Black.
 Proof.
   unfold Mate_in.
   exists Queen, {| file:=D; rank:=R2;|}, {| file:=D; rank:=R1;|}.
+  unfold example_board.
   intros.
-  simpl in *.
-  unfold for_all_valid_moves_from, for_all_pieces_in_board.
-  apply SquareMapProp.fold_rec_nodep.
-  auto.
-  intros square color_piece P square_in_board acc. split.
-  apply acc.
-  destruct color_piece.
-  destruct color. 2: { simpl. auto. }
-  unfold valid_moves, possible_moves, get_square.
-  rewrite (SquareMap.find_1 square_in_board).
-  unfold example_board in square_in_board.
-  unfold play_move in square_in_board; simpl in square_in_board.
-  foreach_square square_in_board.
-  apply SquareSetProp.fold_rec_nodep.
-  split; auto.
-  intros.
-  apply SquareSetProp.FM.empty_iff in H0. destruct H0.
+  for_each_valid_move.
+  - subst. discriminate.
+  - subst. discriminate.
+  - subst.
+    
 Defined.
 
 Theorem is_in_mate_in_2 : Mate_in 2 example_board Black.
 Proof.
   unfold Mate_in.
   exists King, {| file:=F; rank:=R3;|}, {| file:=G; rank:=R3;|}.
+  unfold example_board.
   intros.
-  simpl.
-  unfold for_all_valid_moves_from, for_all_pieces_in_board. simpl.
-  apply SquareMapProp.fold_rec_nodep.
-  auto.
-  intros square color_piece P square_in_board acc. split.
-  apply acc.
-  destruct color_piece.
-  destruct color. 2: { simpl. auto. }
-  unfold valid_moves, possible_moves, get_square.
-  rewrite (SquareMap.find_1 square_in_board).
-  unfold example_board in square_in_board.
-  unfold play_move in square_in_board; simpl in square_in_board.
-  foreach_square square_in_board.
-  apply SquareSetProp.fold_rec_nodep. { simpl. auto. }
-  intros.
+  for_each_valid_move.
+
+  apply SquareSetProp.Dec.F.filter_iff in is_possible_move as [is_attack no_ally].
 Defined.
   
