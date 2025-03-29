@@ -222,6 +222,7 @@ Definition possible_moves (board: Board) (turn: Color) (from: Square) :=
 Definition play_move piece from to board turn :=
   SquareMap.remove from (SquareMap.add to {| piece := piece; color:= turn|} board).
 
+
 Definition is_valid_move piece from to board turn :=
   let new_board := play_move piece from to board turn in
   get_square board from = Some {| piece:=piece; color:=turn|} /\
@@ -365,6 +366,7 @@ Proof.
   unfold example_board.
   intros.
   for_each_valid_move.
+  - subst. discriminate.
   - subst. discriminate.
   - subst. discriminate.
   - subst.

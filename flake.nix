@@ -12,7 +12,7 @@
     packages.${system}.default = self.packages.x86_64-linux.hello;
     devShells.${system}.default = pkgs.mkShell {
       packages = with pkgs; [
-        coq_8_16
+        coq_8_20
       ];
     };
   };
