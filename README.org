@@ -1,0 +1,36 @@
+#+TITLE: Modelagem e verificação formal de estratégias de xadrez
+#+AUTHOR: Leonardo Ribeiro Santiago (120036072)
+#+OPTIONS: toc:nil date:nil
+
+#+LaTeX_CLASS: article
+#+LaTeX_CLASS_OPTIONS: [a4paper]
+
+#+BEGIN_abstract
+TODO.
+
+#+END_abstract
+
+* Introdução
+
+Verificação formal de software descreve o conjunto de axiomas, regras e práticas que permitem descrever provas sobre o comportamento de programas de computador. A história de verificação formal pode ser traçada diretamente da história da teoria da computabilidade, tendo origens na empreitada de Hilbert de descrever uma máquina teórica que seria capaz de deduzir para qualquer afirmação se é universalmente verdadeira ou falsa  - conhecido como /Entscheidungsproblem/. Para determinar isso, fez-se necessário primeiro determinar o que é um algoritmo.
+
+Em 1910, Bertrand Russel objetivou construir um sistema donde todas equações matemáticas válidas poderiam ser derivadas, utilizando os fundamentos da teoria dos conjuntos introduzida por Cantor. Para Russel, um algoritmo seria uma sequência de deduções lógicas válidas dentro de um sistema axiomático. Tal empreitada provou-se complicada, visto que o problema da auto referência causou múltiplas inconsistências fundamentais dentro da formulação de teoria dos conjuntos dada por Gottlob Frege, a mais famosa dessas conhecida como o paradoxo de Russel. O cerne desse paradoxo consiste em construir um conjunto $S$ que contém todos os conjuntos que não contém a si mesmo, fazendo com que a proposição $S \in S$ não tenha resposta válida.
+
+Em sua obra prima /Principia Mathematica/, Russel rudimentarmente esboçou o que pode ser considerado o primeiro sistema de tipos em sua definição de teoria dos conjuntos, como alternativa aos axiomas oferecidos por Cantor, para evitar o problema da auto referência, tornando o sistema consideravelmente mais complexo ao introduzir uma hierarquia de universos, ao invés de um único conjunto universo. Concomitantemente, Zermelo e Fraenkel ofereceram uma axiomatização alternativa consideravelmente mais simples evitando o problema da auto referência, conhecidas como ZFC, que é até hoje pode ser considerada como a fundação da matemática moderna.
+
+Em 1931, Kurt Gödel demonstrou que todo sistema complexo o suficiente para conter os números naturais contém declarações válidas que não podem ser provadas pelo sistema, conhecido como teorema da incompletude - o que inclui tanto o sistema de Russel e o ZFC. Três anos depois, Gödel formalizou uma classe de funções conhecidas como funções recursivas gerais, dando sua própria tentativa de responder o que seria um algoritmo: qualquer função recursiva que esteja na classe que ele descrevera. 
+
+Em 1936, Alonzo Church desenvolveu o cálculo lambda para descrever funções no contexto de teoria dos números, e mostrou que tal sistema é complexo o suficiente para codificar números e aritmética. Para Church, um algoritmo seria qualquer função definível no sistema do cálculo lambda. Utilizando esse sistema, Church foi capaz de provar que o desafio original proposto por Hilbert era impossível, mostrando que o problema de determinar se uma expressão bem formada do cálculo lambda tem uma forma "beta normal" é impossível.
+
+No mesmo ano, Alan Turing desenvolveu outro modelo para computar funções, conhecidas hoje em dia como máquinas de Turing, para computar programas manipulando símbolos em uma fita, e mostrou que seu sistema também era capaz de codificar funções, números e aritmética. Para Turing, um algoritmo seria uma tabela de transições que descrevem uma máquina. Assim como Church, ele também mostrou a existência de um problema indecidível em seu modelo - o problema da parada.
+
+Church, Turing e Kleene formalmente demonstraram que os três sistemas são equivalentes, e que descrevem exatamente a mesma classe de funções computáveis. Tal prova é a base do que é hoje conhecido como a tese de Church-Turing, que descreve que qualquer modelo computacional capaz de calcular tal classe de funções deve ser equivalente a uma máquina de Turing (ou uma função no cálculo lambda). Apesar de não provada, a tese é corroborada por inúmeras tentativas futuras infrutíferas de descrever modelos de computação "mais efetivos", como Autômatos celulares, máquinas de registro, lógica combinatória, algoritmos de Markov, e outros: todos são equivalentes à máquinas de Turing e, consequentemente, ao cálculo lambda.
+
+Em 1940, inspirando-se no trabalho de Russel, Church estendeu o cálculo lambda para incluir um sistema de tipos, conhecido como cálculo lambda simplesmente tipado, de forma a proibir termos que não normalizam (entram em /loop/ infinito ao avaliá-los), demonstrando que tal linguagem é fortemente normalizante, isto é, todas as computações terminam. Haskell Curry e William Howard estenderam esse trabalho, construindo relações diretas entre matemática construtiva e sistemas de tipo no cálculo lambda.
+
+A correspondência de Curry-Howard, como ficou conhecida a observação de tais relações, explicita que o tipo de uma função pode ser diretamente correlacionado com o enunciado da prova, e a expressão do cálculo lambda por sua vez representa o corpo, ou o próprio algoritmo. Nessa interpretação, termos no cálculo lambda simplesmente tipado podem ser visto como provas de fórmulas na lógica intuicionista implicacional.
+
+É importante ressaltar a distinção entre matemática "tradicional" e a matemática construtiva: 
+
+Dessa forma, fica claro que o ato de provar enunciados matemáticos pode ser reduzido a construir uma expressão no cálculo lambda com o tipo correspondente, que pode ser checado por algoritmos computacionais. Para representar 
+

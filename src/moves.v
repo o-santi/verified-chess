@@ -393,6 +393,5 @@ Proof.
   for_each_valid_move.
   exists Queen, {| file := D; rank := R2 |}, {| file := D; rank := R1 |}.
   intros.
-  for_each_valid_move. vm_compute in is_valid0.
+  for_each_valid_move.
 Defined.
-  

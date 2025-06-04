@@ -3,3 +3,4 @@
 - [[https://argo.matf.bg.ac.rs/publications/2015/krk-cade.pdf][Proving Correctness of a KRK Chess Endgame Strategy by using Isabelle/HOL and Z3]]
 - [[https://poleiro.info/posts/2013-09-08-an-introduction-to-combinatorial-game-theory.html][An introduction to combinatorial game theory]]
 - [[http://adam.chlipala.net/cpdt/html/toc.html][Certified Programming with Dependent Types]]
+- [[https://journals.sagepub.com/doi/pdf/10.3233/ICG-2013-36203?download=true][PROVING CORRECTNESS OF A KRK CHESS ENDGAME STRATEGY BY SAT-BASED CONSTRAINT SOLVING]]

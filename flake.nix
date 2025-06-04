@@ -13,6 +13,11 @@
     devShells.${system}.default = pkgs.mkShell {
       packages = with pkgs; [
         coq_8_20
+        (texlive.combine {
+          inherit (texlive) scheme-basic collection-fontsrecommended
+            dvisvgm dvipng # for preview and export as html
+            wrapfig amsmath ulem hyperref capt-of;
+        })
       ];
     };
   };
