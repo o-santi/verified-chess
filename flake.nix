@@ -16,8 +16,10 @@
         (texlive.combine {
           inherit (texlive) scheme-basic collection-fontsrecommended
             dvisvgm dvipng # for preview and export as html
+            biblatex latexmk
             wrapfig amsmath ulem hyperref capt-of;
         })
+        
       ];
     };
   };
