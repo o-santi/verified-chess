@@ -16,7 +16,7 @@
         (texlive.combine {
           inherit (texlive) scheme-basic collection-fontsrecommended
             dvisvgm dvipng # for preview and export as html
-            biblatex latexmk
+            biblatex latexmk babel-portuges
             wrapfig amsmath ulem hyperref capt-of;
         })
         
