@@ -29,7 +29,9 @@ Verificação formal de software descreve o conjunto de axiomas, regras e práti
 
 O compilador de C /CompCert/ [cite:@2006-Leroy-compcert] é um dos maiores expoentes dessa área. Ao desenvolver um modelo formal de memória contendo ponteiros, o compilador permite não somente descrever transformações entre programas, mas também provar matematicamente que tais transformações preservam a mesma semântica que o programa original. Dessa forma, torna-se trivial introduzir otimizações que simplificam o programa garantindo que essas não introduzem /bugs/ no programa original, visto que o cerne do compilador é manter a verificada prova de que o resultado final do código fonte é semânticamente igual ao binário compilado. De fato, [cite:@Yang2011] mostraram que, dentre todos os compiladores de C tradicionais, incluindo =gcc= e =clang=, o /CompCert/ fora o único a não apresentar sequer um /bug/ de compilação após testes minuciosos.
 
+O microkernel /seL4/ [cite:@Klein2014] é o primeiro e único microkernel de propósito geral que possue uma prova de corretude de funcionalidade, isto é, que seu código em /C/ implementa o modelo abstrato de sua especificação, o que o torna livre de problemas de /stack overflow/, /deadlocks/, erros de aritmética e outros problemas de implementação. Além disso, provas de garantia de disponibilidade, integridade, e performance no pior caso são todas formalmente verificadas, fazendo com que esse micro-kernel tenha ampla adoção em casos de uso de missão crítica.
 
+O algoritmo de consenso /Raft/ é outro exemplo de 
 
 
 
