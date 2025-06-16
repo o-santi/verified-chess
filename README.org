@@ -16,6 +16,7 @@ Verificação formal de software é o campo da computação que se preocupa com 
 * Introdução
 
 # https://ntrs.nasa.gov/api/citations/19890006914/downloads/19890006914.pdf
+# https://counterexamples.org/strict-positivity.html
 
 O processo de desenvolvimento de /software/ pode ser separado em dois problemas distintos: o de validação, que pretende assegurar que o programa a ser desenvolvido resolve um problema desejado, e o de verificação, que assegura que o programa desenvolvido implementa as especificações formadas na fase de validação.
 
@@ -80,9 +81,9 @@ Apesar disso, inferência de tipos no caso geral é um problema indecidível nes
 
 Assim, o sistema de tipos Hindley-Milner se tornou base para inúmeras linguagens funcionais, como a família ML de linguagens, Haskell, e Rust. Pelo sucesso da teoria, ela foi objeto de inúmeras extensões, como por exemplo, para permitir restrições de classes de tipos, uma forma de polimorfismo /ad-hoc/, em Haskell conhecidos como /type classes/ e em Rust conhecidos como /traits/. Entretanto, a extensão com maiores efeitos semânticos é a introdução de definições recursivas, para que essas linguagens se tornem mais práticas de se usar. Adicionar definições recursivas fazem com que a lógica dessas linguagens se torne inconsistente, visto que se torna possível construir termos de qualquer tipo utilizando loops infinitos. O problema de adicionar definições recursivas sem permitir que qualquer tipo se torne habitado é recorrente em quase todos os sistemas de tipos, e será revisto quando falarmos de tipos dependentes. 
 
-Ainda que essas linguagens não possam ser usadas para provar teoremas interessantes, elas possuem características muito peculiares na área de verificação formal. Em /Theorems for Free/[cite:@10.1145/99370.99404], Wadler demonstrou que, dentro do /System F/, é possível deduzir propriedades sobre qualquer funções genérica sobre o tipo de seu argumento, sem sequer observar a implementação dessas. Por exemplo, é possível mostrar que uma função polimórfica de tipo $\prod T, T \rightarrow T$ necessariamente precisa ser isomórfica à função identidade $\Lambda T, \lambda (t: T), t$; isto é, não é possível implementar uma função desse tipo que não seja a função identidade.
+Ainda que essas linguagens não possam ser usadas para provar teoremas interessantes, elas possuem características muito peculiares na área de verificação formal. Em /Theorems for Free/[cite:@10.1145/99370.99404], Wadler demonstrou que, dentro do /System F/, é possível deduzir propriedades sobre qualquer funções genérica sobre o tipo de seu argumento, sem sequer observar a implementação dessas. Por exemplo, é possível mostrar que uma função polimórfica de tipo $\prod T, T \rightarrow T$ necessariamente precisa ser isomórfica à função identidade $\Lambda T, \lambda (t: T). t$; isto é, não é possível implementar uma função desse tipo que não seja a função identidade.
 
-Wadler foi além. Estendendo o sistema com um tipo genérico de listas $\prod T \rightarrow [T]$, é possível provar propriedades não óbvias sobre funções paramétricas. Sendo $f: A \rightarrow B$, e $map\, f\, [x_1; \hdots; x_n] = [f\, x_1; \hdots,; f\, x_n]$, qualquer função $R: \Lambda T, [[T]]\rightarrow [T]$ deve satisfazer a seguinte igualdade:
+Wadler foi além. Estendendo o sistema com um tipo genérico de listas $\prod T \rightarrow [T]$, é possível provar propriedades não óbvias sobre funções paramétricas. Sendo $f: A \rightarrow B$, e $map\, f\, [x_1; \hdots; x_n] = [f\, x_1; \hdots,; f\, x_n]$, qualquer função $R: \prod T, [[T]]\rightarrow [T]$ deve satisfazer a seguinte igualdade:
 $$
 map\, f\, (R\, lists) = R\, (map\, (map\, f)\, lists)
 $$

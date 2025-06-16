@@ -1,4 +1,6 @@
 -R src chess
+src/json.v
+src/json_theorems.v
 src/board.v
 src/moves.v
 src/facts.v
