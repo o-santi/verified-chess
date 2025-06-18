@@ -82,6 +82,3 @@ Theorem parse_correct_left (j: json) : parse_json (serialize_json j) = Ok((j, ""
 Proof.
   induction j; try auto.
   - unfold parse_json. unfold one_of. rewrite parse_number_isomorphic. reflexivity.
-  - 
-  
-  
