@@ -213,11 +213,11 @@ Definition codepoint_eqb (a b: codepoint) : bool :=
   let '(b1, b2, b3, b4, b5, b6) := b in
   (xorb a1 b1) && b4_equal a2 b2 && b4_equal a3 b3 && b4_equal a4 b4 && b4_equal a5 b5 && b4_equal a6 b6.
 
-Definition unicode_str : Type := list codepoint.
+Definition from_ascii (c: ascii) : codepoint :=
+  let '(_, (b1, (b2, (b3, (b4, (b5, (b6, b7))))))) := to_bits (byte_of_ascii c) in
+  (false, b4_zero, b4_zero, b4_zero, (false, b7, b6, b5), (b4, b3, b2, b1)).
 
-(* Definition from_ascii (c: ascii) : codepoint := *)
-(*   let '(_, (b1, (b2, (b3, (b4, (b5, (b6, b7))))))) := to_bits (byte_of_ascii c) in *)
-(*   (false, b4_zero, b4_zero, b4_zero, (false, b7, b6, b5), (b4, b3, b2, b1)). *)
+Definition unicode_str : Type := list codepoint.
 
 Definition encoding_size_from_header (b: byte) : option encoding_size :=
   match to_bits b with
@@ -313,8 +313,8 @@ Qed.
 (*     E6 97 A5 E6 9C AC E8 AA 9E *)
 (*     --------+--------+-------- *)
 Definition test3 :
-  (fmap (fun '(s, r) => (List.map show_codepoint s, r)) (utf8_decode [xed; x95; x9c; xea; xb5; xad; xec; x96; xb4]))
-  = Ok (["U+D55C"%string; "U+AD6D"%string; "U+C5B4"%string], []).
+  (fmap (fun '(s, r) => (List.map show_codepoint s, r)) (utf8_decode [xe6; x97; xa5; xe6; x9c; xac; xe8; xaa; x9e]))
+  = Ok (["U+65E5"%string; "U+672C"%string; "U+8A9E"%string], []).
   reflexivity.
 Qed.
 
@@ -330,6 +330,10 @@ Definition test4 :
   = Ok (["U+FEFF"%string; "U+33B4"%string], []).
   reflexivity.
 Qed.
+
+Definition to_unicode (s: string) : @result unicode_str (list unicode_error) :=
+  let bytes := List.map byte_of_ascii (list_ascii_of_string s) in
+  fmap (fun '(v, _) => v) (utf8_decode bytes).
 
 Definition from_unicode_str (s: unicode_str) : option string.
   Admitted.
@@ -450,6 +454,20 @@ Definition parse_number: json_parser number :=
           fractional_part := match fraction with Some l => l | None => [] end;
           exponent_part := exponent
         |}, rest).
+
+Definition number_str : unicode_str.
+  refine (
+      let str := to_unicode "1"%string in
+      (match str as e return e = to_unicode "1"%string -> unicode_str with
+       | Ok v => fun H => v
+       | Err e => fun H => _
+       end) (eq_refl str)).
+  unfold to_unicode in H.
+  discriminate.
+Defined.
+
+Compute (parse_number number_str).
+
 
 Definition serialize_json (obj: json) : unicode_str :=
   match obj with
