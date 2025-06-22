@@ -3,11 +3,8 @@ From Coq Require Import Strings.Ascii.
 From Coq Require Import ZArith.
 
 From Coq Require Import Lists.List. Import ListNotations.
-From Coq Require Import Vectors.Vector.
 
 From Coq Require Import Strings.Byte.
-
-Search Vector.t.
 
 Open Scope char_scope.
   
@@ -69,34 +66,38 @@ Definition predicate {I E} (pred: I -> bool) (err: option I -> E) : @parser I I 
         end
     end.
 
-Fixpoint many_aux { A I E} (p: @parser A I E) (acc: list A) (fuel: nat) : @parser (list A) I E :=
+Fixpoint many_aux { A I E} (p: @parser A I E) (fuel: nat) : @parser (list A) I E :=
   fun s => 
     match fuel with
-    | 0 => Ok (acc, s)
+    | 0 => Ok ([], s)
     | S fuel' =>
-        match p s as res with
-        | Ok (val, rest) => many_aux p (acc ++ [ val ]) fuel' rest
-        | Err _ => Ok (acc, s)
+        match p s with
+        | Err _ => Ok ([], s)
+        | Ok (val, rest) =>
+            let* (vals, rest) := many_aux p fuel' rest in
+            Ok (val :: vals, rest)
         end
     end.
 
 Definition many {A I E} (p: @parser A I E): @parser (list A) I E :=
-  fun s => many_aux p [] (S (length s)) s.
+  fun s => many_aux p (S (length s)) s.
 
-Fixpoint repeat_n {T I E} (n: nat) (p: @parser T I E) : @parser (Vector.t T n) I E :=
-  fun s =>
-    match n with
-    | 0 => Ok (nil T, s)
-    | S n' =>
-        let* (val, rest) := p s in
-        let* (vals, rest) := repeat_n n' p rest in
-        Ok (cons T val n' vals, rest)
-    end.
+(* Fixpoint repeat_n {T I E} (n: nat) (p: @parser T I E) : @parser (Vector.t T n) I E := *)
+(*   fun s => *)
+(*     match n with *)
+(*     | 0 => Ok (nil T, s) *)
+(*     | S n' => *)
+(*         let* (val, rest) := p s in *)
+(*         let* (vals, rest) := repeat_n n' p rest in *)
+(*         Ok (cons T val n' vals, rest) *)
+(*     end. *)
 
 (* ============================================== *)
 (* UTF-8 encoding and decoding                    *)
 (* ============================================== *)
 
+Local Notation "0" := false.
+Local Notation "1" := true.
 
 Definition b3 : Type := bool * bool * bool.
 Definition b4 : Type := bool * bool * bool * bool.
@@ -121,22 +122,22 @@ Inductive hex : Type :=
 
 Definition b4_to_hex (b: b4) : hex :=
   match b with
-  | (false, false, false, false) => H0
-  | (false, false, false, true) => H1
-  | (false, false, true, false) => H2
-  | (false, false, true, true) => H3
-  | (false, true, false, false) => H4
-  | (false, true, false, true) => H5
-  | (false, true, true, false) => H6
-  | (false, true, true, true) => H7
-  | (true, false, false, false) => H8
-  | (true, false, false, true) => H9
-  | (true, false, true, false) => HA
-  | (true, false, true, true) => HB
-  | (true, true, false, false) => HC
-  | (true, true, false, true) => HD
-  | (true, true, true, false) => HE
-  | (true, true, true, true) => HF
+  | (0, 0, 0, 0) => H0
+  | (0, 0, 0, 1) => H1
+  | (0, 0, 1, 0) => H2
+  | (0, 0, 1, 1) => H3
+  | (0, 1, 0, 0) => H4
+  | (0, 1, 0, 1) => H5
+  | (0, 1, 1, 0) => H6
+  | (0, 1, 1, 1) => H7
+  | (1, 0, 0, 0) => H8
+  | (1, 0, 0, 1) => H9
+  | (1, 0, 1, 0) => HA
+  | (1, 0, 1, 1) => HB
+  | (1, 1, 0, 0) => HC
+  | (1, 1, 0, 1) => HD
+  | (1, 1, 1, 0) => HE
+  | (1, 1, 1, 1) => HF
   end.
 
 Definition hex_to_ascii (h: hex) : ascii :=
@@ -158,8 +159,6 @@ Definition hex_to_ascii (h: hex) : ascii :=
   | HE => "E"
   | HF => "F"
   end.
-
-Definition continuation : Type := (bool * bool * bool * bool * bool * bool).
 
 Inductive codepoint_range :=
 | FirstRange (b: b7)
@@ -187,7 +186,7 @@ Definition show_codepoint (c: codepoint) : string :=
   let p := fun (b: b4) => hex_to_ascii (b4_to_hex b) in
   let '(b1, b2, b3, b4, b5, b6) := c in
   match (b1, b2) with
-  | (false, b4_zero) => String "U" (String "+" (String (p b3) (String (p b4) (String (p b5) (String (p b6) EmptyString)))))
+  | (0, (0, 0, 0, 0)) => String "U" (String "+" (String (p b3) (String (p b4) (String (p b5) (String (p b6) EmptyString)))))
   | _ => String "U" (String "+" (String (match b1 with true => "1"| false => "0" end) (String (p b2) (String (p b3) (String (p b4) (String (p b5) (String (p b6) EmptyString)))))))
   end.
   
@@ -195,14 +194,14 @@ Definition show_codepoint (c: codepoint) : string :=
 Definition codepoint_range_to_codepoint (cr: codepoint_range) : option codepoint :=
   match cr with
   | FirstRange (b1, b2, b3, b4, b5, b6, b7) =>
-      Some (false, b4_zero, b4_zero, b4_zero, (false, b1, b2, b3), (b4, b5, b6, b7))
-  | SecondRange (false, false, false, false, _) _snd => None (* overlong encoding *)
+      Some (0, b4_zero, b4_zero, b4_zero, (0, b1, b2, b3), (b4, b5, b6, b7))
+  | SecondRange (0, 0, 0, 0, _) _snd => None (* overlong encoding *)
   | SecondRange (b1, b2, b3, b4, b5) (b6, b7, b8, b9, b10, b11) =>
-      Some (false, b4_zero, b4_zero, (false, b1, b2, b3), (b4, b5, b6, b7), (b8, b9, b10, b11))
-  | ThirdRange (false, false, false, false) (false, _, _, _, _, _) _trd => None (* overlong encoding *)
+      Some (0, b4_zero, b4_zero, (0, b1, b2, b3), (b4, b5, b6, b7), (b8, b9, b10, b11))
+  | ThirdRange (0, 0, 0, 0) (0, _, _, _, _, _) _trd => None (* overlong encoding *)
   | ThirdRange (b1, b2, b3, b4) (b5, b6, b7, b8, b9, b10) (b11, b12, b13, b14, b15, b16) =>
-      Some (false, b4_zero, (b1, b2, b3, b4), (b5, b6, b7, b8), (b9, b10, b11, b12), (b13, b14, b15, b16))
-  | FourthRange (false, false, false) (false, false, false, false, false, false) _trd _frth => None (* overlong encoding *)
+      Some (0, b4_zero, (b1, b2, b3, b4), (b5, b6, b7, b8), (b9, b10, b11, b12), (b13, b14, b15, b16))
+  | FourthRange (0, 0, 0) (0, 0, 0, 0, 0, 0) _trd _frth => None (* overlong encoding *)
   | FourthRange (b1, b2, b3) (b4, b5, b6, b7, b8, b9) (b10, b11, b12, b13, b14, b15) (b16, b17, b18, b19, b20, b21) =>
       Some (b1, (b2, b3, b4, b5), (b6, b7, b8, b9), (b10, b11, b12, b13), (b14, b15, b16, b17), (b18, b19, b20, b21))
   (* | _ => None *)
@@ -214,21 +213,30 @@ Definition codepoint_eqb (a b: codepoint) : bool :=
   (xorb a1 b1) && b4_equal a2 b2 && b4_equal a3 b3 && b4_equal a4 b4 && b4_equal a5 b5 && b4_equal a6 b6.
 
 Definition from_ascii (c: ascii) : codepoint :=
-  let '(_, (b1, (b2, (b3, (b4, (b5, (b6, b7))))))) := to_bits (byte_of_ascii c) in
-  (false, b4_zero, b4_zero, b4_zero, (false, b7, b6, b5), (b4, b3, b2, b1)).
+  let '(b1, (b2, (b3, (b4, (b5, (b6, (b7, _))))))) := to_bits (byte_of_ascii c) in
+  (0, b4_zero, b4_zero, b4_zero, (false, b7, b6, b5), (b4, b3, b2, b1)).
 
 Definition unicode_str : Type := list codepoint.
 
+
+(* Char. number range  |        UTF-8 octet sequence *)
+(*    (hexadecimal)    |              (binary) *)
+(* --------------------+--------------------------------------------- *)
+(* 0000 0000-0000 007F | 0xxxxxxx *)
+(* 0000 0080-0000 07FF | 110xxxxx 10xxxxxx *)
+(* 0000 0800-0000 FFFF | 1110xxxx 10xxxxxx 10xxxxxx *)
+(* 0001 0000-0010 FFFF | 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx *)
+
 Definition encoding_size_from_header (b: byte) : option encoding_size :=
   match to_bits b with
-  | (b1, (b2, (b3, (b4, (b5, (b6, (b7, false))))))) => Some (OneByte (b7, b6, b5, b4, b3, b2, b1))
-  | (b1, (b2, (b3, (b4, (b5, (false, (true, true))))))) => Some (TwoBytes (b5, b4, b3, b2, b1))
-  | (b1, (b2, (b3, (b4, (false, (true, (true, true))))))) => Some (ThreeBytes (b4, b3, b2, b1))
-  | (b1, (b2, (b3, (false, (true, (true, (true, true))))))) => Some (FourBytes (b3, b2, b1))
+  | (b1, (b2, (b3, (b4, (b5, (b6, (b7, 0))))))) => Some (OneByte (b7, b6, b5, b4, b3, b2, b1))
+  | (b1, (b2, (b3, (b4, (b5, (0, (1, 1))))))) => Some (TwoBytes (b5, b4, b3, b2, b1))
+  | (b1, (b2, (b3, (b4, (0, (1, (1, 1))))))) => Some (ThreeBytes (b4, b3, b2, b1))
+  | (b1, (b2, (b3, (0, (1, (1, (1, 1))))))) => Some (FourBytes (b3, b2, b1))
   | _ => None
   end. 
 
-Definition parse_continuation : @parser continuation byte unicode_error :=
+Definition parse_continuation : @parser b6 byte unicode_error :=
   let continuation_from_byte :=
     fun b =>
       let '(b1, (b2, (b3, (b4, (b5, (b6, (b7, b8))))))) := to_bits b in
@@ -301,8 +309,8 @@ Qed.
 (*     ED 95 9C EA B5 AD EC 96 B4 *)
 (*     --------+--------+-------- *)
 Definition test2 :
-  (fmap (fun '(s, _) => List.map show_codepoint s) (utf8_decode [xe6; x97; xa5; xe6; x9c; xac; xe8; xaa; x9e]))
-  = Ok ["U+65E5"%string; "U+672C"%string; "U+8A9E"%string].
+  (fmap (fun '(s, r) => (List.map show_codepoint s, r)) (utf8_decode [xe6; x97; xa5; xe6; x9c; xac; xe8; xaa; x9e]))
+  = Ok (["U+65E5"%string; "U+672C"%string; "U+8A9E"%string], []).
   reflexivity.
 Qed.
 
@@ -327,7 +335,7 @@ Qed.
 
 Definition test4 :
   (fmap (fun '(s, r) => (List.map show_codepoint s, r)) (utf8_decode [xef; xbb; xbf; xf0; xa3; x8e; xb4]))
-  = Ok (["U+FEFF"%string; "U+33B4"%string], []).
+  = Ok (["U+FEFF"%string; "U+0233B4"%string], []).
   reflexivity.
 Qed.
 
@@ -335,8 +343,26 @@ Definition to_unicode (s: string) : @result unicode_str (list unicode_error) :=
   let bytes := List.map byte_of_ascii (list_ascii_of_string s) in
   fmap (fun '(v, _) => v) (utf8_decode bytes).
 
-Definition from_unicode_str (s: unicode_str) : option string.
-  Admitted.
+Definition utf8_encode_codepoint (c: codepoint) : list byte :=
+  match c with
+  | (0, (0, 0, 0, 0), (0, 0, 0, 0), (0, 0, 0, 0), (0, b1, b2, b3), (b4, b5, b6, b7)) =>
+      [ Byte.of_bits (b7, (b6, (b5, (b4, (b3, (b2, (b1, 0))))))) ]
+  | (0, (0, 0, 0, 0), (0, 0, 0, 0), (0, b1, b2, b3), (b4, b5, b6, b7), (b8, b9, b10, b11)) =>
+      [ Byte.of_bits (b5,  (b4,  (b3, (b2, (b1, (0,  (1, 1)))))));
+        Byte.of_bits (b11, (b10, (b9, (b8, (b7, (b6, (0, 1))))))) ]
+  | (0, (0, 0, 0, 0), (b1, b2, b3, b4), (b5, b6, b7, b8), (b9, b10, b11, b12), (b13, b14, b15, b16)) =>
+      [ Byte.of_bits (b4,  (b3,  (b2,  (b1,  (0,   (1,   (1, 1)))))));
+        Byte.of_bits (b10, (b9,  (b8,  (b7,  (b6,  (b5,  (0, 1)))))));
+        Byte.of_bits (b16, (b15, (b14, (b13, (b12, (b11, (0, 1)))))))]
+  | (b1, (b2, b3, b4, b5), (b6, b7, b8, b9), (b10, b11, b12, b13), (b14, b15, b16, b17), (b18, b19, b20, b21)) =>
+      [ Byte.of_bits (b3,  (b2,  (b1,  (0,   (1,   (1,   (1, 1)))))));
+        Byte.of_bits (b9,  (b8,  (b7,  (b6,  (b5,  (b4,  (0, 1)))))));
+        Byte.of_bits (b15, (b14, (b13, (b12, (b11, (b10, (0, 1)))))));
+        Byte.of_bits (b21, (b20, (b19, (b18, (b17, (b16, (0, 1))))))) ]
+  end.
+
+Definition utf8_encode (s: unicode_str) : list byte :=
+  concat (List.map utf8_encode_codepoint s).
 
 (* ============================================== *)
 (* JSON parser implementation                     *)
@@ -469,47 +495,47 @@ Defined.
 Compute (parse_number number_str).
 
 
-Definition serialize_json (obj: json) : unicode_str :=
-  match obj with
-  | JNull => "null"
-  | JTrue => "true"
-  | JFalse => "false"
-  | JNumber n => string_of_nat n
-  | JString s => String "034"%char (s ++ (String "034"%char EmptyString))
-  | _ => ""
-  end.
+(* Definition serialize_json (obj: json) : unicode_str := *)
+(*   match obj with *)
+(*   | JNull => "null" *)
+(*   | JTrue => "true" *)
+(*   | JFalse => "false" *)
+(*   | JNumber n => string_of_nat n *)
+(*   | JString s => String "034"%char (s ++ (String "034"%char EmptyString)) *)
+(*   | _ => "" *)
+(*   end. *)
 
-Compute (serialize_json (JString "hello world")).
-Close Scope string_scope.
+(* Compute (serialize_json (JString "hello world")). *)
+(* Close Scope string_scope. *)
 
-Definition parse_constant (c: json) : json_parser json :=
-  let const_string := serialize_json c in 
-  fun s =>
-    if prefix const_string s then
-      Ok((c, substring (String.length const_string) (String.length s) s))
-    else
-      Err (Message "Expected " ++ const_string).
+(* Definition parse_constant (c: json) : json_parser json := *)
+(*   let const_string := serialize_json c in  *)
+(*   fun s => *)
+(*     if prefix const_string s then *)
+(*       Ok((c, substring (String.length const_string) (String.length s) s)) *)
+(*     else *)
+(*       Err (Message "Expected " ++ const_string). *)
                         
-Definition parse_null: json_parser json := parse_constant JNull.
-Definition parse_true: json_parser json := parse_constant JTrue.
-Definition parse_false: json_parser json := parse_constant JFalse.
+(* Definition parse_null: json_parser json := parse_constant JNull. *)
+(* Definition parse_true: json_parser json := parse_constant JTrue. *)
+(* Definition parse_false: json_parser json := parse_constant JFalse. *)
 
-Definition parse_string: json_parser json :=
-  fun s =>
-    let* (_, rest) := expect """" s in
-    let* (s, rest) := many (not """") rest in
-    let* (_, rest) := expect """" rest in
-    Ok (JString (string_of_list_ascii (rev s)), rest).
+(* Definition parse_string: json_parser json := *)
+(*   fun s => *)
+(*     let* (_, rest) := expect """" s in *)
+(*     let* (s, rest) := many (not """") rest in *)
+(*     let* (_, rest) := expect """" rest in *)
+(*     Ok (JString (string_of_list_ascii (rev s)), rest). *)
 
-Definition parse_object_aux (fuel: nat) (acc: list (string * json)) : json_parser json := 
+(* Definition parse_object_aux (fuel: nat) (acc: list (string * json)) : json_parser json :=  *)
 
-Definition parse_object: json_parser json := 
+(* Definition parse_object: json_parser json :=  *)
 
-Definition parse_value : json_parser json :=
-  any [
-      parse_number;
-      parse_string;
-      parse_null;
-      parse_true;
-      parse_false
-    ].
+(* Definition parse_value : json_parser json := *)
+(*   any [ *)
+(*       parse_number; *)
+(*       parse_string; *)
+(*       parse_null; *)
+(*       parse_true; *)
+(*       parse_false *)
+(*     ]. *)
