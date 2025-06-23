@@ -29,7 +29,7 @@ Proof.
     + discriminate H.
 Defined.
 
-Lemma utf8_encode_correct : forall l (c: codepoint),
+Lemma utf8_encode_correct : forall (c: codepoint) l,
     l = utf8_encode_codepoint c  ->
     (exists b1 b2 b3 b4 b5 b6 b7,
         l = [ Byte.of_bits (b7, (b6, (b5, (b4, (b3, (b2, (b1, false))))))) ]
@@ -68,6 +68,17 @@ Proof.
   left. repeat eexists. apply H.
 Defined.
 
+Ltac for_all_valid_utf8_encodings c :=
+  let encodings := constr:(utf8_encode_correct c (utf8_encode_codepoint c) eq_refl) in
+  let rec f H :=
+    match type of H with
+    | exists bit : bool, _ => let b := fresh "b" in destruct H as [b _rest]; f _rest
+    | ?a /\ ?b /\ ?c => destruct H as [eq [c_eq no_overlong]]
+    | ?a /\ ?b => destruct H as [eq c_eq]
+    | ?a \/ ?b => destruct H as [A | B]; [f A | f B]
+    end
+  in f encodings.
+
 Theorem encoding_size_correct :
   (forall b1 b2 b3 b4 b5 b6 b7,
       encoding_size_from_header
@@ -83,11 +94,11 @@ Theorem encoding_size_correct :
         (Byte.of_bits (b1, (b2, (b3, (false, (true, (true, (true, true)))))))) = Some (FourBytes (b3, b2, b1))).
 Proof.
   unfold encoding_size_from_header.
-  repeat split; intros; rewrite Byte.to_bits_of_bits.
-  - destruct b4; destruct b5; destruct b6; destruct b7; reflexivity.
-  - destruct b4; destruct b5; reflexivity.
-  - destruct b4; reflexivity.
-  - reflexivity.
+  repeat split; intros; rewrite Byte.to_bits_of_bits;
+    repeat match goal with
+      | [ |- (if ?bit then _ else _) = _ ] => destruct bit
+      | [ |- (_ = _)] => reflexivity
+    end.
 Defined.
 
 Theorem parse_continuation_correct: forall rest b1 b2 b3 b4 b5 b6,
@@ -115,50 +126,23 @@ Proof.
 
   Ltac no_overlongs :=
     match goal with
+    | [ H: ?bit = true \/ ?b |- _] => destruct H; no_overlongs
     | [ G: ?bit = true |- context[if ?bit then _ else _] ] => rewrite G; reflexivity
     | |- context[if ?bit then _ else _] => destruct bit; [ reflexivity | no_overlongs ]
     end.
+  
   intros.
   destruct encoding_size_correct as [enc_one [enc_two [enc_three enc_four]]].
-  destruct (utf8_encode_correct (utf8_encode_codepoint c) c) as [? | [ ? | [ ? | [ ? ?]]]]; auto.
-  - destruct H as [b1 [b2 [b3 [b4 [b5 [b6 [b7 [eq c_eq]]]]]]]].
-    rewrite eq.
-    unfold parse_codepoint, parse_header.
-    unfold bind.
-    unfold app.
-    rewrite enc_one. simpl.
-    rewrite c_eq.
-    reflexivity.
-  - destruct H as [b1 [b2 [b3 [b4 [b5 [b6 [b7 [b8 [b9 [b10 [b11 [eq [c_eq no_overlong]]]]]]]]]]]]].
-    rewrite eq.
-    unfold parse_codepoint, parse_header.
-    unfold app.
-    rewrite enc_two.
-    rewrite c_eq.
-    unfold bind.
-    repeat rewrite parse_continuation_correct.
-    unfold codepoint_range_to_codepoint.
-    destruct no_overlong as [H | [H | [H | H]]]; no_overlongs.
-  - destruct H as [b1 [b2 [b3 [b4 [b5 [b6 [b7 [b8 [b9 [b10 [b11 [ b12 [b13 [b14 [b15 [b16 [eq [c_eq no_overlong]]]]]]]]]]]]]]]]]].
-    rewrite eq.
-    unfold parse_codepoint, parse_header.
-    unfold app.
-    rewrite enc_three.
-    rewrite c_eq.
-    unfold bind.
-    repeat rewrite parse_continuation_correct.
-    unfold codepoint_range_to_codepoint.
-    destruct no_overlong as [H | [H | [H | [H | H]]]]; no_overlongs.
-  - destruct H as [b2 [b3 [b4 [b5 [b6 [b7 [b8 [b9 [b10 [b11 [ b12 [b13 [b14 [b15 [b16 [b17 [b18 [b19 [b20 [b21 [eq [c_eq no_overlong]]]]]]]]]]]]]]]]]]]]]].
-    rewrite eq.
-    unfold parse_codepoint, parse_header.
-    unfold app.
-    rewrite enc_four.
-    rewrite c_eq.
-    unfold bind.
-    repeat rewrite parse_continuation_correct.
-    unfold codepoint_range_to_codepoint.
-    destruct no_overlong as [H | [H | [H | [H | H]]]]; no_overlongs.
+  for_all_valid_utf8_encodings c;
+    auto;
+    rewrite eq;
+    unfold parse_codepoint, parse_header, bind, app;
+    [ rewrite enc_one | rewrite enc_two | rewrite enc_three | rewrite enc_four];
+    rewrite c_eq;
+    repeat rewrite parse_continuation_correct;
+    try reflexivity;
+    unfold codepoint_range_to_codepoint, bind;
+    no_overlongs.
 Defined.
 
 Lemma parse_single_codepoint_correct : forall c, parse_codepoint (utf8_encode_codepoint c) = Ok (c, []).
@@ -167,33 +151,26 @@ Proof.
   rewrite <- (List.app_nil_r (utf8_encode_codepoint c)).
   apply (parse_codepoint_encode_correct c []).
 Defined.
-  
+
 Lemma many_codepoint_distributes : forall (c: codepoint) (cs: list codepoint),
     many parse_codepoint (utf8_encode_codepoint c ++ concat (map utf8_encode_codepoint cs))%list =
       let* (x, rest) := parse_codepoint (utf8_encode_codepoint c) in
       let* (xs, rest) := many parse_codepoint (concat (map utf8_encode_codepoint cs)) in
       Ok (x :: xs, rest).
 Proof.
-  induction cs.
-  - simpl.
-    rewrite app_nil_r.
-    rewrite parse_single_codepoint_correct. unfold bind.
-    destruct (utf8_encode_correct (utf8_encode_codepoint c) c) as [? | [ ? | [ ? | [ ? ?]]]]; auto;
-      [ destruct H as [b1 [b2 [b3 [b4 [b5 [b6 [b7 [eq c_eq]]]]]]]]
-      | destruct H as [b1 [b2 [b3 [b4 [b5 [b6 [b7 [b8 [b9 [b10 [b11 [eq [c_eq no_overlong]]]]]]]]]]]]]
-      | destruct H as [b1 [b2 [b3 [b4 [b5 [b6 [b7 [b8 [b9 [b10 [b11 [ b12 [b13 [b14 [b15 [b16 [eq [c_eq no_overlong]]]]]]]]]]]]]]]]]]
-      | destruct H as [b2 [b3 [b4 [b5 [b6 [b7 [b8 [b9 [b10 [b11 [ b12 [b13 [b14 [b15 [b16 [b17 [b18 [b19 [b20 [b21 [eq [c_eq no_overlong]]]]]]]]]]]]]]]]]]]]]]
-      ]; rewrite eq; rewrite c_eq. unfold many, many_aux. unfold bind.
+  intros.
+  unfold bind.
+  rewrite parse_single_codepoint_correct.
+  unfold many. simpl.
+  fold (@many_aux 
   
-  Admitted.
 
- 
 Theorem encode_decode_correct : forall u, utf8_decode (utf8_encode u) = Ok (u, []).
 Proof.
   intros.
   unfold utf8_encode, utf8_decode.
-
-  induction u; auto. simpl.
+  induction u; try reflexivity.
+  simpl.
   rewrite many_codepoint_distributes.
   rewrite parse_single_codepoint_correct.
   rewrite IHu.
