@@ -1,10 +1,10 @@
 .direnv
 .envrc
-src/*.vo
-src/*.aux
-src/*.glob
-src/*.vos
-src/*.vok
+*.vo
+*.aux
+*.glob
+*.vos
+*.vok
 src/.*
 *CoqMakefile*
 Makefile.coq

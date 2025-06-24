@@ -1,33 +1,13 @@
-Require Import json.
-
 From Coq Require Import Strings.String.
 From Coq Require Import ZArith.
 From Coq Require Import Lia.
 From Coq Require Import Lists.List. Import ListNotations.
 
+Require Import Json.Parser.
+Require Import Json.Theorems.Parser.
+Require Import Json.Utf8.
+
 Open Scope string_scope.
-
-Lemma parser_map_correct: forall T R I E (f: T -> R) s (p: @parser T I E),
-    (parser_map f p) s = fmap (fun '(v, rest) => (f v, rest)) (p s).
-Proof.
-  intros.
-  unfold parser_map, fmap.
-  destruct (p s) as [[val rest] |  err]; reflexivity.
-Defined.
-
-Lemma predicate_correct: forall T I E (p: @parser T I E) (pred: I -> bool) (err_handler: option I -> list E) v s rest,
-    Ok (v, rest) = predicate pred err_handler s ->
-    pred v = true.
-Proof.
-  intros.
-  unfold predicate in H.
-  
-  destruct s.
-  - discriminate H.
-  - destruct (pred i) eqn:Eq.
-    + inversion H. apply Eq.
-    + discriminate H.
-Defined.
 
 Lemma utf8_encode_correct : forall (c: codepoint) l,
     l = utf8_encode_codepoint c  ->
@@ -114,8 +94,11 @@ Proof.
      then Ok (Byte.of_bits (b1, (b2, (b3, (b4, (b5, (b6, (false, true))))))), rest)
      else
       Err
-        [InvalidContinuationHeader
-           (Byte.of_bits (b1, (b2, (b3, (b4, (b5, (b6, (false, true))))))))]) = Ok (Byte.of_bits (b1, (b2, (b3, (b4, (b5, (b6, (false, true))))))), rest)) as G; try reflexivity.
+        (Error
+           (InvalidContinuationHeader
+              (Some
+                 (Byte.of_bits
+                    (b1, (b2, (b3, (b4, (b5, (b6, (false, true)))))))))))) = Ok (Byte.of_bits (b1, (b2, (b3, (b4, (b5, (b6, (false, true))))))), rest)) as G; try reflexivity.
   rewrite G.
   rewrite Byte.to_bits_of_bits.
   reflexivity.
@@ -152,6 +135,38 @@ Proof.
   apply (parse_codepoint_encode_correct c []).
 Defined.
 
+(* Lemma many_aux_strong_progress : forall A I E s p, *)
+(*     (forall val rest, p s = Ok (val, rest) -> (length rest) < (length s)) -> *)
+(*     (exists val, @many_aux A I E p (S (length s)) s = Ok (val, [])). *)
+(* Proof. *)
+(*   (* intros. *) *)
+(*   (* induction s. *) *)
+(*   (* - simpl. destruct (p []) as [[val rest] | errs]. *) *)
+(*   (*   + specialize (H val rest eq_refl). inversion H. rewrite length_zero_iff_nil in H1. subst. eauto. *) *)
+(*   (*   + eauto. *) *)
+(*   (* - simpl in *. destruct (p (a :: s)) as [[val rest] | errs]. *) *)
+(*   (*   + specialize (H val rest eq_refl). *) *)
+(*   (*     inversion H; subst. *) *)
+(* Admitted. *)
+
+Lemma many_aux_length_of_string_is_enough : forall n s,
+    (S (List.length s)) <= n ->
+    many_aux parse_codepoint (S (List.length s)) s = many_aux parse_codepoint n s.
+Proof.
+  Admitted.
+  (* intros n. *)
+  (* induction n; intros. *)
+  (* - inversion H. *)
+  (* - inversion H; try reflexivity. subst. *)
+  (*   generalize dependent n. *)
+  (*   induction s; intros; try reflexivity. *)
+  (*   specialize (IHn (a::s) H1) as I1. *)
+  (*   simpl in H, H1. *)
+  (*   rewrite Nat.le_succ_l in H, H1. apply Nat.lt_le_incl in H, H1. *)
+  (*   specialize (IHs H H1) as I2. *)
+  (*   simpl. *)
+  
+     
 Lemma many_codepoint_distributes : forall (c: codepoint) (cs: list codepoint),
     many parse_codepoint (utf8_encode_codepoint c ++ concat (map utf8_encode_codepoint cs))%list =
       let* (x, rest) := parse_codepoint (utf8_encode_codepoint c) in
@@ -159,11 +174,15 @@ Lemma many_codepoint_distributes : forall (c: codepoint) (cs: list codepoint),
       Ok (x :: xs, rest).
 Proof.
   intros.
-  unfold bind.
   rewrite parse_single_codepoint_correct.
   unfold many. simpl.
-  fold (@many_aux 
-  
+  rewrite parse_codepoint_encode_correct.
+  unfold bind.
+  rewrite <- many_aux_length_of_string_is_enough.
+  - reflexivity.
+  - rewrite length_app.
+    for_all_valid_utf8_encodings c; rewrite eq; simpl; auto.
+Defined.
 
 Theorem encode_decode_correct : forall u, utf8_decode (utf8_encode u) = Ok (u, []).
 Proof.
@@ -175,40 +194,4 @@ Proof.
   rewrite parse_single_codepoint_correct.
   rewrite IHu.
   reflexivity.
-Qed.
-
-   
-Theorem parse_null_isomorphic : parse_null "null" = Ok((JNull, "")).
-  reflexivity.
-Qed.
-Theorem parse_true_isomorphic : parse_true "true" = Ok((JTrue, "")).
-  reflexivity.
-Qed.
-Theorem parse_false_isomorphic : parse_false "false" = Ok((JFalse, "")).
-  reflexivity.
-Qed.
-
-
-
-Theorem parser_map_correct { A B }: forall (f: A -> B) (p: @parser A) (s: string),
-    parser_map f p s = fmap (fun '(x, rest) => (f x, rest)) (p s).
-Proof.
-  intros.
-  unfold parser_map.
-  cbv delta. f_equal; simpl.
-  destruct (p s); try destruct x; reflexivity.
-Qed.
-
-Theorem parse_number_isomorphic :forall n, parse_number (serialize_json (JNumber n)) = Ok((JNumber n, "")).
-Proof.
-  intros.
-  unfold parse_number, serialize_json.
-  rewrite parser_map_correct.
-  rewrite parse_nat_isomorphic.
-  reflexivity.
 Defined.
-
-Theorem parse_correct_left (j: json) : parse_json (serialize_json j) = Ok((j, "")).
-Proof.
-  induction j; try auto.
-  - unfold parse_json. unfold one_of. rewrite parse_number_isomorphic. reflexivity.

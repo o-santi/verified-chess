@@ -1,7 +1,7 @@
--R src chess
-src/json.v
-src/json_theorems.v
-src/board.v
-src/moves.v
-src/facts.v
-src/pgn.v
+-R json Json
+json/Parser.v
+json/Theorems/Parser.v
+json/Utf8.v
+json/Theorems/Utf8.v
+json/Json.v
+json/Theorems/Json.v
