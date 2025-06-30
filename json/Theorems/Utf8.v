@@ -135,38 +135,53 @@ Proof.
   apply (parse_codepoint_encode_correct c []).
 Defined.
 
-(* Lemma many_aux_strong_progress : forall A I E s p, *)
-(*     (forall val rest, p s = Ok (val, rest) -> (length rest) < (length s)) -> *)
-(*     (exists val, @many_aux A I E p (S (length s)) s = Ok (val, [])). *)
-(* Proof. *)
-(*   (* intros. *) *)
-(*   (* induction s. *) *)
-(*   (* - simpl. destruct (p []) as [[val rest] | errs]. *) *)
-(*   (*   + specialize (H val rest eq_refl). inversion H. rewrite length_zero_iff_nil in H1. subst. eauto. *) *)
-(*   (*   + eauto. *) *)
-(*   (* - simpl in *. destruct (p (a :: s)) as [[val rest] | errs]. *) *)
-(*   (*   + specialize (H val rest eq_refl). *) *)
-(*   (*     inversion H; subst. *) *)
-(* Admitted. *)
-
-Lemma many_aux_length_of_string_is_enough : forall n s,
-    (S (List.length s)) <= n ->
-    many_aux parse_codepoint (S (List.length s)) s = many_aux parse_codepoint n s.
+Lemma parse_codepoint_strong_progress: forall suffix response text,
+    (Ok (response, suffix) = parse_codepoint text) ->
+    length suffix < length text.
 Proof.
-  Admitted.
-  (* intros n. *)
-  (* induction n; intros. *)
-  (* - inversion H. *)
-  (* - inversion H; try reflexivity. subst. *)
-  (*   generalize dependent n. *)
-  (*   induction s; intros; try reflexivity. *)
-  (*   specialize (IHn (a::s) H1) as I1. *)
-  (*   simpl in H, H1. *)
-  (*   rewrite Nat.le_succ_l in H, H1. apply Nat.lt_le_incl in H, H1. *)
-  (*   specialize (IHs H H1) as I2. *)
-  (*   simpl. *)
-  
-     
+  intros.
+  generalize dependent response.
+  generalize dependent suffix.
+  induction text as [| byte1 text_rest1]; intros.
+  - inversion H.
+  - simpl. (* apply Nat.lt_lt_succ_r. *)
+    destruct (Byte.to_bits byte1) as [b1 [b2 [b3 [b4 [b5 [b6 [b7 b8]]]]]]] eqn:byte1_bits.
+    unfold parse_codepoint, parse_header, encoding_size_from_header in H.
+    rewrite byte1_bits in H.
+    repeat match goal with
+           | [ H: context[if ?bit then _ else _] |- _ ] => destruct bit
+           | [ H: (_ = _) |- _ ] => simpl in H; discriminate H
+           end; simpl in H;
+      (* encoding size = 1 *)
+      try (inversion H; lia);
+      (* encoding size = 2 *)
+      unfold parse_continuation, predicate in H;
+      destruct text_rest1 as [| byte2 text_rest2] eqn:E_text_rest1; try (simpl in H; discriminate H);
+      rewrite parser_map_correct in H;
+      destruct (Byte.to_bits byte2) as [B1 [B2 [B3 [B4 [B5 [B6 [B7 B8]]]]]]] eqn:byte2_bits;
+      destruct B8; destruct B7; try discriminate H; simpl in H; rewrite byte2_bits in H;
+      try (simpl; inversion H; subst; lia);
+      (* encoding size = 3 *)
+      try (destruct text_rest2 as [| byte3 text_rest3] eqn:E_text_rest2; [
+            simpl in H; discriminate H |
+            rewrite parser_map_correct in H;
+            destruct (Byte.to_bits byte3) as [C1 [C2 [C3 [C4 [C5 [C6 [C7 C8]]]]]]] eqn:byte3_bits;
+            destruct C8; destruct C7; try discriminate H; simpl in H; rewrite byte3_bits in H
+        ]);
+      (* encoding size = 4 *)
+      try (simpl; inversion H; subst; lia);
+      try (destruct text_rest3 as [| byte4 text_rest4] eqn:E_text_rest3; [
+        simpl in H; discriminate H |
+        rewrite parser_map_correct in H;
+        destruct (Byte.to_bits byte4) as [D1 [D2 [D3 [D4 [D5 [D6 [D7 D8]]]]]]] eqn:byte4_bits;
+        destruct D8; destruct D7; try discriminate H; simpl in H; rewrite byte4_bits in H
+      ]);
+      repeat match goal with
+        | [ H: context[if ?bit then _ else _] |- _ ] => destruct bit
+        | [ H: (_ = _) |- _ ] => simpl in H; try discriminate H; inversion H; simpl; lia
+        end.
+Defined.
+    
 Lemma many_codepoint_distributes : forall (c: codepoint) (cs: list codepoint),
     many parse_codepoint (utf8_encode_codepoint c ++ concat (map utf8_encode_codepoint cs))%list =
       let* (x, rest) := parse_codepoint (utf8_encode_codepoint c) in
@@ -178,10 +193,9 @@ Proof.
   unfold many. simpl.
   rewrite parse_codepoint_encode_correct.
   unfold bind.
-  rewrite <- many_aux_length_of_string_is_enough.
-  - reflexivity.
-  - rewrite length_app.
-    for_all_valid_utf8_encodings c; rewrite eq; simpl; auto.
+  rewrite <- many_aux_saturation_aux with (n:= ( S ( S (Datatypes.length (utf8_encode_codepoint c ++ concat (map utf8_encode_codepoint cs))))));
+    [ reflexivity | apply parse_codepoint_strong_progress | | ];
+    for_all_valid_utf8_encodings c; rewrite eq; simpl; lia.
 Defined.
 
 Theorem encode_decode_correct : forall u, utf8_decode (utf8_encode u) = Ok (u, []).
@@ -195,3 +209,49 @@ Proof.
   rewrite IHu.
   reflexivity.
 Defined.
+
+Theorem decode_encode_correct: forall (unicode: unicode_str) (bytes rest: list Byte.byte),
+    (utf8_decode bytes = Ok (unicode, rest)) ->
+    bytes = List.app (utf8_encode unicode) rest.
+Proof.
+  Admitted.
+  
+  (* intros unicode bytes. *)
+  (* destruct encoding_size_correct as [enc_one [enc_two [enc_three enc_four]]]. *)
+  (* generalize dependent unicode. *)
+  (* induction bytes as [ | byte1 bytes_rest]; intros. *)
+  (* - inversion H. reflexivity. *)
+  (* - unfold utf8_decode, many in H. *)
+  (*   unfold many_aux in H. fold (@many_aux codepoint) in H. unfold bind in H. *)
+  (*   destruct (parse_codepoint (byte1 :: bytes_rest)) as [[val rest'] | err] eqn:ParseByte1; *)
+  (*     [ | inversion H; subst; unfold utf8_encode; reflexivity ]. *)
+    
+  (*   rewrite <- many_aux_saturation_aux with (n:= (Datatypes.length (byte1 :: bytes_rest))) in H. *)
+  (*   2: { apply parse_codepoint_strong_progress. } *)
+  (*   fold (@many codepoint Byte.byte unicode_error parse_codepoint rest') in H. fold (utf8_decode rest') in H. *)
+  (*   destruct (utf8_decode rest') as [[u r] | err]; try discriminate H. inversion H. subst. clear H. *)
+  (*   unfold parse_codepoint, parse_header in ParseByte1. *)
+  (*   destruct (encoding_size_from_header byte1) as [ enc_size | ] eqn:E_enc_size_byte1. *)
+  (*   + unfold bind in ParseByte1. destruct enc_size eqn:E_enc_size. *)
+  (*     * simpl in ParseByte1. *)
+  (*       destruct b as [[[[[[b1 b2] b3] b4] b5] b6] b7]. inversion ParseByte1. *)
+  (*       erewrite <- enc_one in E_enc_size_byte1. *)
+  (*       unfold utf8_encode. *)
+        
+  (* intros unicode. *)
+  (* induction unicode; intros. *)
+  (* - unfold utf8_decode in H. simpl. *)
+  (*   generalize dependent rest. *)
+  (*   induction bytes; intros; unfold many in H; simpl in H. *)
+  (*   + inversion H. reflexivity. *)
+  (*   + destruct (parse_codepoint (a::bytes)) as [[val1 rest1] | err1]; try discriminate H. *)
+  (*     destruct (parse_codepoint rest1) as [[val2 rest2] | err2]; try discriminate H. *)
+  (*     destruct (many_aux parse_codepoint (Datatypes.length bytes) rest2) as [[val3 rest3] | err3]; discriminate H. *)
+  (*     inversion H. reflexivity. *)
+  (* - unfold utf8_decode in H. *)
+    
+      
+    
+   
+
+  
