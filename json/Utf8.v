@@ -114,7 +114,7 @@ Definition codepoint_range_to_codepoint (cr: codepoint_range) : option codepoint
   | ThirdRange (0, 0, 0, 0) (0, _, _, _, _, _) _trd => None (* overlong encoding *)
   | ThirdRange (b1, b2, b3, b4) (b5, b6, b7, b8, b9, b10) (b11, b12, b13, b14, b15, b16) =>
       Some (0, b4_zero, (b1, b2, b3, b4), (b5, b6, b7, b8), (b9, b10, b11, b12), (b13, b14, b15, b16))
-  | FourthRange (0, 0, 0) (0, 0, 0, 0, 0, 0) _trd _frth => None (* overlong encoding *)
+  | FourthRange (0, 0, 0) (0, 0, _, _, _, _) _trd _frth => None (* overlong encoding *)
   | FourthRange (b1, b2, b3) (b4, b5, b6, b7, b8, b9) (b10, b11, b12, b13, b14, b15) (b16, b17, b18, b19, b20, b21) =>
       Some (b1, (b2, b3, b4, b5), (b6, b7, b8, b9), (b10, b11, b12, b13), (b14, b15, b16, b17), (b18, b19, b20, b21))
   (* | _ => None *)

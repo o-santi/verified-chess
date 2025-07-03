@@ -26,7 +26,7 @@ Defined.
 
 Theorem many_aux_saturation_aux : forall A I E processor,
   (forall suffix response text,
-    Ok (response, suffix) = processor text ->
+    processor text = Ok (response, suffix) ->
     length suffix < length text) ->
   forall n text fuel,
   (S (length text)) < n ->
@@ -42,7 +42,7 @@ Proof.
     destruct x as [response suffix].
     exfalso. assert (@length I suffix < @length I nil).
     apply processor_good with (response := response) (suffix := suffix).
-    symmetry. apply response_definition.
+    apply response_definition.
     inversion H1.
     reflexivity. simpl in text_bounded. 
     destruct fuel. exfalso. inversion enough_fuel.
@@ -52,7 +52,7 @@ Proof.
       reflexivity.
       assert (length rest < length (text_head :: text_tail)). {
         apply processor_good with (response := val).
-        symmetry. apply response_definition.
+        apply response_definition.
       } {
       replace
         (many_aux processor (S (length text_tail)) rest)
