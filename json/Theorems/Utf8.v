@@ -308,6 +308,22 @@ Proof.
       no_overlongs2; auto; subst; try discriminate.
 Defined.
 
+Theorem parse_codepoint_injective : forall bytes1 bytes2 code rest,
+    parse_codepoint bytes1 = Ok (code, rest) ->
+    parse_codepoint bytes2 = Ok (code, rest) ->
+    bytes1 = bytes2.
+Proof.
+Admitted.
+  (* intro bytes1.
+  destruct bytes1; intros.
+  - inversion H.
+  - destruct bytes2.
+    + inversion H0.
+    + unfold parse_codepoint, parse_header, encoding_size_from_header in *. to_bits b; to_bits b0. crush_bits; try inversion H0; try inversion H; f_equal; *)
+  (*       simpl in *; try (rewrite <- H2 in H4; inversion H4; subst; *)
+  (*       rewrite <- byte_bits in byte_bits0; apply (f_equal Byte.of_bits) in byte_bits0; repeat rewrite (Byte.of_bits_to_bits) in byte_bits0; auto). *)
+      
+
 Lemma parse_single_codepoint_correct : forall c bytes,
     (utf8_encode_codepoint c) = Some bytes ->
     parse_codepoint bytes = Ok (c, []).
@@ -365,19 +381,25 @@ Theorem encode_decode_correct_strong : forall (unicode unicode_rest: unicode_str
 Proof.
   intros unicode.
   induction unicode; intros.
-  - inversion H. rewrite length_zero_iff_nil in H2. subst. inversion H0; subst. unfold utf8_decode. simpl.
+  - inversion H. rewrite length_zero_iff_nil in H2. subst. inversion H0. reflexivity.
   - destruct unicode_lesser as [| codepoint1 unicode_rest1] eqn:E_lesser.
-    + inversion H0. 
+    + inversion H0. reflexivity.
     + simpl in H0.
       destruct (utf8_encode_codepoint codepoint1) eqn:U_enc_codepoint1; [| discriminate H0].
       destruct (utf8_encode unicode_rest1) as [[val2 rest2] | err] eqn:U_enc_unicode_rest1; [| discriminate H0].
       inversion_clear H0. subst.
-      apply IHunicode with (unicode_lesser:= unicode_rest1) in U_enc_unicode_rest1; try (simpl in H; lia).
-      unfold utf8_decode, many. simpl.
+      apply IHunicode in U_enc_unicode_rest1; try (simpl in H; lia).
+      unfold utf8_decode, all. simpl.
       apply parse_codepoint_encode_correct with (c := codepoint1) (rest := val2) in U_enc_codepoint1.
       rewrite U_enc_codepoint1.
-      apply parse_codepoint_strong_progress in U_enc_codepoint1. unfold bind.
-      
+      apply parse_codepoint_strong_progress in U_enc_codepoint1.
+      unfold bind.
+      rewrite <- all_aux_saturation_aux with (n := (S (Datatypes.length (l ++ val2))));
+        try apply parse_codepoint_strong_progress; try lia.
+      fold (all parse_codepoint val2). fold (utf8_decode val2). rewrite U_enc_unicode_rest1.
+      destruct ((l ++ val2)%list) eqn:L.
+      * apply app_eq_nil in L as [L1 L2]. subst. inversion U_enc_codepoint1.
+      * reflexivity.
 Defined.
 
 Theorem encode_decode_correct : forall unicode unicode_rest bytes,
@@ -398,15 +420,25 @@ Proof.
   intros bytes.
   induction bytes; intros.
   - inversion H. rewrite length_zero_iff_nil in H2. subst. inversion H0. split; reflexivity.
-  - destruct bytes_lesser as [| bytes1 bytes_rest1] eqn:E_lesser.
+  - destruct bytes_lesser as [| byte1 bytes_rest1] eqn:E_lesser.
     + inversion H0; reflexivity.
-    + unfold utf8_decode, many in H0. simpl in H0.
-      destruct (parse_codepoint (bytes1 :: bytes_rest1)) as [[bytes2 bytes_rest2] | err] eqn:Parse_bytes1.
-      2: { 
-           
-      destruct (parse_codepoint bytes_rest2) as [[bytes3 bytes_rest3] | err] eqn:Parse_bytes_rest2.
-      
-    
+    + unfold utf8_decode, all in H0. simpl in H0.
+      destruct (parse_codepoint (byte1 :: bytes_rest1)) as [[code1 bytes_rest2] | err] eqn:Parse_bytes1; [| discriminate H0].
+      destruct (parse_codepoint bytes_rest2) as [[code2 bytes_rest3] | err] eqn:Parse_bytes_rest2.
+      2: {
+        destruct bytes_rest2. inversion_clear H0; subst. unfold utf8_encode.
+        destruct (utf8_encode_codepoint code1) eqn:U_enc_code1.
+        * simpl. apply parse_codepoint_encode_correct with (rest:= []) in U_enc_code1.
+          rewrite app_nil_r in *.
+          apply parse_codepoint_injective with (bytes1 := byte1::bytes_rest1) in U_enc_code1.
+          rewrite U_enc_code1. reflexivity. auto.
+        * 
+          
+        
+      unfold bind in H0.
+      rewrite <- all_aux_saturation_aux with (n := S (length bytes_rest1)) in H0. fold (many parse_codepoint bytes_rest3) in H0. fold (utf8_decode bytes_rest3) in H0.
+      destruct (utf8_decode bytes_rest3) as [[code3 bytes_rest4] | err]; try discriminate H0.
+      inversion H0; subst.
     
   (* generalize dependent unicode. *)
   (* destruct encoding_size_correct as [e1 [e2 [e3 e4]]]. *)

@@ -202,7 +202,7 @@ Definition parse_codepoint : @parser codepoint byte unicode_decode_error :=
     end.
 
 Definition utf8_decode : @parser unicode_str byte unicode_decode_error :=
-  many parse_codepoint.
+  all parse_codepoint.
 
 (* The character sequence U+0041 U+2262 U+0391 U+002E "A<NOT IDENTICAL *)
 (* TO><ALPHA>." is encoded in UTF-8 as follows: *)

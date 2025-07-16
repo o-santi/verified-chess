@@ -79,6 +79,26 @@ Fixpoint many_aux { A I E} (p: @parser A I E) (fuel: nat) : @parser (list A) I E
 Definition many {A I E} (p: @parser A I E): @parser (list A) I E :=
   fun s => many_aux p (S (length s)) s.
 
+Fixpoint all_aux { A I E} (p: @parser A I E) (fuel: nat) : @parser (list A) I E :=
+  fun s => 
+    match fuel with
+    | 0 => Ok ([], s)
+    | S fuel' =>
+        match s with
+        | [] => Ok ([], s)
+        | _ => 
+            match p s with
+            | Err e => Err e
+            | Ok (val, rest) =>
+                let* (vals, rest) := all_aux p fuel' rest in
+                Ok (val :: vals, rest)
+            end
+        end
+    end.
+
+Definition all {A I E} (p: @parser A I E): @parser (list A) I E :=
+  fun s => all_aux p (S (length s)) s.
+
 (* Fixpoint repeat_n {T I E} (n: nat) (p: @parser T I E) : @parser (Vector.t T n) I E := *)
 (*   fun s => *)
 (*     match n with *)

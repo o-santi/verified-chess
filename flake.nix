@@ -17,6 +17,8 @@
           inherit (texlive) scheme-basic collection-fontsrecommended
             dvisvgm dvipng # for preview and export as html
             biblatex latexmk babel-portuges
+            abntex2 memoir xpatch booktabs textcase enumitem supertabular listings
+            lastpage glossaries
             wrapfig amsmath ulem hyperref capt-of;
         })
         
