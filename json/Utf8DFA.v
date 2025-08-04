@@ -162,8 +162,8 @@ Qed.
 (*     ED 95 9C EA B5 AD EC 96 B4 *)
 (*     --------+--------+-------- *)
 Definition test2 :
-  (fmap (fun '(s, r) => (List.map show_codepoint s, r)) (utf8_dfa_decode [xe6; x97; xa5; xe6; x9c; xac; xe8; xaa; x9e]))
-  = Ok (["U+65E5"%string; "U+672C"%string; "U+8A9E"%string], []).
+  (fmap (fun '(s, r) => (List.map show_codepoint s, r)) (utf8_dfa_decode [xed; x95; x9c; xea; xb5; xad; xec; x96; xb4]))
+  = Ok (["U+D55C"%string; "U+AD6D"%string; "U+C5B4"%string], []).
   reflexivity.
 Qed.
 
