@@ -11,32 +11,32 @@ Open Scope string_scope.
 
 Ltac destruct_parse_continuation :=
   match goal with
-    | [G: context[parse_continuation (?a::?b)] |- _] => idtac
-    | [H: context[parse_continuation ?text] |- _] => destruct text; [ try discriminate | ]
+  | [G: context[parse_continuation (?a::?b)] |- _] => idtac
+  | [H: context[parse_continuation ?text] |- _] => destruct text; [ try discriminate | ]
   end;
   match goal with
-    | [H: context[parse_continuation (?b::?rest)] |- _] =>
-        unfold parse_continuation in H;
-        rewrite parser_map_correct in H;
-        simpl in H;
-        let B1 := fresh "b" in
-        let B2 := fresh "b" in
-        let B3 := fresh "b" in
-        let B4 := fresh "b" in
-        let B5 := fresh "b" in
-        let B6 := fresh "b" in
-        let B7 := fresh "b" in
-        let B8 := fresh "b" in
-        let eqn_name := fresh "byte_bits" in
-        let eqn_name2 := fresh "byte_of_bits" in
-        destruct (Byte.to_bits b) as [B1 [B2 [B3 [B4 [B5 [B6 [B7 B8]]]]]]] eqn:eqn_name;
-        match goal with
-        | [G: context[if (?a && negb ?b) then _ else _] |- _ ] =>
-            destruct a; destruct b; try discriminate G; simpl in H; rewrite eqn_name in H;
-            apply (f_equal Byte.of_bits) in eqn_name;
-            rewrite Byte.of_bits_to_bits in eqn_name
-        end
-    end.
+  | [H: context[parse_continuation (?b::?rest)] |- _] =>
+      unfold parse_continuation in H;
+      rewrite parser_map_correct in H;
+      simpl in H;
+      let B1 := fresh "b" in
+      let B2 := fresh "b" in
+      let B3 := fresh "b" in
+      let B4 := fresh "b" in
+      let B5 := fresh "b" in
+      let B6 := fresh "b" in
+      let B7 := fresh "b" in
+      let B8 := fresh "b" in
+      let eqn_name := fresh "byte_bits" in
+      let eqn_name2 := fresh "byte_of_bits" in
+      destruct (Byte.to_bits b) as [B1 [B2 [B3 [B4 [B5 [B6 [B7 B8]]]]]]] eqn:eqn_name;
+      match goal with
+      | [G: context[if (?a && negb ?b) then _ else _] |- _ ] =>
+          destruct a; destruct b; try discriminate G; simpl in H; rewrite eqn_name in H;
+          apply (f_equal Byte.of_bits) in eqn_name;
+          rewrite Byte.of_bits_to_bits in eqn_name
+      end
+  end.
 
 Ltac to_bits byte :=
   let rec break_bit bits :=
@@ -52,7 +52,7 @@ Ltac to_bits byte :=
       unfold Utf8.codepoint, Utf8.b4 in byte;
       destruct byte as [[[[[b b4_1] b4_2] b4_3] b4_4] b4_5];
       break_bit b4_1; break_bit b4_2; break_bit b4_3; break_bit b4_4; break_bit b4_5
-                         
+                                                                                
   | Utf8.b6 =>
       unfold Utf8.b6 in byte; break_bit byte
   | Byte.byte =>
@@ -87,8 +87,10 @@ Ltac no_overlongs2 :=
     | |- context[if ?bit then _ else _] => destruct bit
     end.
 
+Opaque Byte.of_bits.
+
 Theorem utf8_encode_codepoint_one_correct: forall (c: codepoint) b1 b2 b3 b4 b5 b6 b7,
-    utf8_encode_codepoint c = Some [ Byte.of_bits (b7, (b6, (b5, (b4, (b3, (b2, (b1, false))))))) ]
+    utf8_encode_codepoint c = Ok [ Byte.of_bits (b7, (b6, (b5, (b4, (b3, (b2, (b1, false))))))) ]
     <-> c = (false, b4_zero, b4_zero, b4_zero, (false, b1, b2, b3), (b4, b5, b6, b7)).
 Proof.
   split; intros.
@@ -96,49 +98,46 @@ Proof.
     repeat match goal with
            | [_: context[if ?bit then _ else _] |- _] => destruct bit
            | [_: _ = _ |- _] => try discriminate
-           end. assert (forall T (a b: T), Some [a] = Some [b] -> a = b).
-    { intros. injection H0. auto. }
-    apply H0 in H.
-    apply (f_equal Byte.to_bits) in H. repeat rewrite Byte.to_bits_of_bits in H. inversion H. subst. reflexivity.
+           end.
+    injection H; intros H0. 
+    apply (f_equal Byte.to_bits) in H0. repeat rewrite Byte.to_bits_of_bits in H0. inversion H0. subst. reflexivity.
   - subst. unfold utf8_encode_codepoint, b4_zero. reflexivity.
 Defined.
 
 Theorem utf8_encode_codepoint_two_correct: forall (c: codepoint) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11,
-    utf8_encode_codepoint c = Some [ Byte.of_bits (b5,  (b4,  (b3, (b2, (b1, (false,  (true, true)))))));
-                                     Byte.of_bits (b11, (b10, (b9, (b8, (b7, (b6, (false, true))))))) ]
+    utf8_encode_codepoint c = Ok [ Byte.of_bits (b5,  (b4,  (b3, (b2, (b1, (false,  (true, true)))))));
+                                   Byte.of_bits (b11, (b10, (b9, (b8, (b7, (b6, (false, true))))))) ]
     <-> (c = (false, b4_zero, b4_zero, (false, b1, b2, b3), (b4, b5, b6, b7), (b8, b9, b10, b11))
        /\ (b1 = true \/ b2 = true \/ b3 = true \/ b4 = true)).
 Proof.
   split; intros.
   - unfold utf8_encode_codepoint in H. to_bits c.
-    assert (forall T (a1 a2 b1 b2: T), Some [a1; a2] = Some [b1; b2] -> a1 = b1 /\ a2 = b2). { intros. injection H0. auto. }
     repeat match goal with
            | [_: context[if ?bit then _ else _] |- _] => destruct bit
            | [_: _ = _ |- _] => try discriminate
            end;
-    apply H0 in H as [H1 H2];
-    apply (f_equal Byte.to_bits) in H1, H2;
+      injection H; intros H1 H2;
+      apply (f_equal Byte.to_bits) in H1, H2;
       repeat (rewrite Byte.to_bits_of_bits in H1, H2); inversion H1; inversion H2; subst; split; auto.
   - destruct H. subst. unfold utf8_encode_codepoint, b4_zero.
     no_overlongs2; subst; reflexivity.
 Defined.
 
 Theorem utf8_encode_codepoint_three_correct: forall (c: codepoint) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16,
-    utf8_encode_codepoint c = Some [ Byte.of_bits (b4,  (b3,  (b2,  (b1,  (false,   (true, (true, true)))))));
-                                     Byte.of_bits (b10, (b9,  (b8,  (b7,  (b6,  (b5,  (false, true)))))));
-                                     Byte.of_bits (b16, (b15, (b14, (b13, (b12, (b11, (false, true)))))))]
+    utf8_encode_codepoint c = Ok [ Byte.of_bits (b4,  (b3,  (b2,  (b1,  (false,   (true, (true, true)))))));
+                                   Byte.of_bits (b10, (b9,  (b8,  (b7,  (b6,  (b5,  (false, true)))))));
+                                   Byte.of_bits (b16, (b15, (b14, (b13, (b12, (b11, (false, true)))))))]
     <-> (c = (false, b4_zero, (b1, b2, b3, b4), (b5, b6, b7, b8), (b9, b10, b11, b12), (b13, b14, b15, b16))
-             /\ (b1 = true \/ b2 = true \/ b3 = true \/ b4 = true \/ b5 = true) (* no overlong encodings *)
-             /\ (b1 = false \/ b2 = false \/ b3 = true \/ b4 = false \/ b5 = false)).
+       /\ (b1 = true \/ b2 = true \/ b3 = true \/ b4 = true \/ b5 = true) (* no overlong encodings *)
+       /\ (b1 = false \/ b2 = false \/ b3 = true \/ b4 = false \/ b5 = false)).
 Proof.
   split; intros.
   - unfold utf8_encode_codepoint in H. to_bits c.
-    assert (forall T (a1 a2 a3 b1 b2 b3: T), Some [a1; a2; a3] = Some [b1; b2; b3] -> a1 = b1 /\ a2 = b2 /\ a3 = b3). { intros. injection H0. auto. }
     repeat match goal with
            | [_: context[if ?bit then _ else _] |- _] => destruct bit
            | [_: _ = _ |- _] => try discriminate
            end;
-      apply H0 in H as [H1 [H2 H3]];
+      injection H; intros H1 H2 H3;
       apply (f_equal Byte.to_bits) in H1, H2, H3;
       repeat (rewrite Byte.to_bits_of_bits in H1, H2, H3); inversion H1; inversion H2; inversion H3; subst; repeat split; auto.
   - destruct H as [H1 [H2 H3]]. unfold utf8_encode_codepoint, b4_zero in *. to_bits c. inversion_clear H1; subst.
@@ -146,63 +145,63 @@ Proof.
 Defined.
 
 Theorem utf8_encode_codepoint_four_correct: forall (c: codepoint) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21,
-    utf8_encode_codepoint c = Some [ Byte.of_bits (b3,  (b2,  (b1,  (false,   (true,  (true,   (true, true)))))));
-                                     Byte.of_bits (b9,  (b8,  (b7,  (b6,  (b5,  (b4,  (false, true)))))));
-                                     Byte.of_bits (b15, (b14, (b13, (b12, (b11, (b10, (false, true)))))));
-                                     Byte.of_bits (b21, (b20, (b19, (b18, (b17, (b16, (false, true))))))) ]
+    utf8_encode_codepoint c = Ok [ Byte.of_bits (b3,  (b2,  (b1,  (false,   (true,  (true,   (true, true)))))));
+                                   Byte.of_bits (b9,  (b8,  (b7,  (b6,  (b5,  (b4,  (false, true)))))));
+                                   Byte.of_bits (b15, (b14, (b13, (b12, (b11, (b10, (false, true)))))));
+                                   Byte.of_bits (b21, (b20, (b19, (b18, (b17, (b16, (false, true))))))) ]
     <-> (c = (b1, (b2, b3, b4, b5), (b6, b7, b8, b9), (b10, b11, b12, b13), (b14, b15, b16, b17), (b18, b19, b20, b21))
-             /\ (b1 = true \/ b2 = true \/ b3 = true \/ b4 = true \/ b5 = true)).
+       /\ ((b1 = true /\ b2 = false /\ b3 = false /\ b4 = false /\ b5 = false)
+          \/ (b1 = false /\ (b2 = true \/ b3 = true \/ b4 = true \/ b5 = true)))).
 Proof.
   split; intros.
   - unfold utf8_encode_codepoint in H. to_bits c.
-    assert (forall T (a1 a2 a3 a4 b1 b2 b3 b4: T), Some [a1; a2; a3; a4] = Some [b1; b2; b3; b4] -> a1 = b1 /\ a2 = b2 /\ a3 = b3 /\ a4 = b4). { intros. injection H0. auto. }
-    repeat match goal with
-           | [_: context[if ?bit then _ else _] |- _] => destruct bit
-           | [_: _ = _ |- _] => try discriminate
-           end;
-      apply H0 in H as [H1 [H2 [H3 H4]]];
+    crush_bits; try discriminate;
+      injection H; intros H1 H2 H3 H4;
       apply (f_equal Byte.to_bits) in H1, H2, H3, H4;
-      repeat (rewrite Byte.to_bits_of_bits in H1, H2, H3, H4); inversion H1; inversion H2; inversion H3; inversion H4; subst; split; auto.
-  - destruct H as [H1 H2]. unfold utf8_encode_codepoint, b4_zero in *. to_bits c. inversion_clear H1; subst.
-    no_overlongs2; subst; try discriminate; auto.
+      repeat (rewrite Byte.to_bits_of_bits in H1, H2, H3, H4); inversion H1; inversion H2; inversion H3; inversion H4; subst; repeat split; tauto.
+  - unfold utf8_encode_codepoint, b4_zero in *. to_bits c.
+    destruct H as [c_eq [[eb1 [eb2 [eb3 [eb4 eb5]]]] | [eb1 [eb2 | [ eb3 | [ eb4 | eb5]]]]]];
+      inversion c_eq;
+      crush_bits; subst; try discriminate; auto.
 Defined.
 
 Lemma utf8_encode_codepoint_correct : forall (c: codepoint),
-    (utf8_encode_codepoint c = None)
+    (exists e, utf8_encode_codepoint c = Err e)
     \/ 
       (exists b1 b2 b3 b4 b5 b6 b7,
-          utf8_encode_codepoint c = Some [ Byte.of_bits (b7, (b6, (b5, (b4, (b3, (b2, (b1, false))))))) ])
+          utf8_encode_codepoint c = Ok [ Byte.of_bits (b7, (b6, (b5, (b4, (b3, (b2, (b1, false))))))) ])
     \/ (exists b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11,
-           utf8_encode_codepoint c = Some [ Byte.of_bits (b5,  (b4,  (b3, (b2, (b1, (false,  (true, true)))))));
-                                            Byte.of_bits (b11, (b10, (b9, (b8, (b7, (b6, (false, true))))))) ]) 
+          utf8_encode_codepoint c = Ok [ Byte.of_bits (b5,  (b4,  (b3, (b2, (b1, (false,  (true, true)))))));
+                                         Byte.of_bits (b11, (b10, (b9, (b8, (b7, (b6, (false, true))))))) ]) 
     \/ (exists b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16,
-           utf8_encode_codepoint c = Some [ Byte.of_bits (b4,  (b3,  (b2,  (b1,  (false,   (true, (true, true)))))));
-                                            Byte.of_bits (b10, (b9,  (b8,  (b7,  (b6,  (b5,  (false, true)))))));
-                                            Byte.of_bits (b16, (b15, (b14, (b13, (b12, (b11, (false, true)))))))])
+          utf8_encode_codepoint c = Ok [ Byte.of_bits (b4,  (b3,  (b2,  (b1,  (false,   (true, (true, true)))))));
+                                         Byte.of_bits (b10, (b9,  (b8,  (b7,  (b6,  (b5,  (false, true)))))));
+                                         Byte.of_bits (b16, (b15, (b14, (b13, (b12, (b11, (false, true)))))))])
     \/ (exists b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21,
-           utf8_encode_codepoint c = Some [ Byte.of_bits (b3,  (b2,  (b1,  (false,   (true,  (true,   (true, true)))))));
-                                            Byte.of_bits (b9,  (b8,  (b7,  (b6,  (b5,  (b4,  (false, true)))))));
-                                            Byte.of_bits (b15, (b14, (b13, (b12, (b11, (b10, (false, true)))))));
-                                            Byte.of_bits (b21, (b20, (b19, (b18, (b17, (b16, (false, true))))))) ]). 
+          utf8_encode_codepoint c = Ok[ Byte.of_bits (b3,  (b2,  (b1,  (false,   (true,  (true,   (true, true)))))));
+                                        Byte.of_bits (b9,  (b8,  (b7,  (b6,  (b5,  (b4,  (false, true)))))));
+                                        Byte.of_bits (b15, (b14, (b13, (b12, (b11, (b10, (false, true)))))));
+                                        Byte.of_bits (b21, (b20, (b19, (b18, (b17, (b16, (false, true))))))) ]). 
 Proof.
   intros.
   destruct (utf8_encode_codepoint c) eqn: utf8_enc_codepoint_c. 
   to_bits c.
   unfold utf8_encode_codepoint in utf8_enc_codepoint_c. symmetry in utf8_enc_codepoint_c.
-  no_overlongs2;
-    lazymatch type of utf8_enc_codepoint_c with
-    | context[Some [_]] => right; left; repeat eexists; apply utf8_enc_codepoint_c
-    | context[Some [_; _]]  => right; right; left; repeat eexists; apply utf8_enc_codepoint_c
-    | context[Some [_; _; _]]  => right; right; right; left; repeat eexists; apply utf8_enc_codepoint_c
-    | context[Some [_; _; _; _]]  => right; right; right; right; repeat eexists; apply utf8_enc_codepoint_c
-    | Some _ = None => discriminate
-    end. auto.
+  crush_bits;
+    repeat match type of utf8_enc_codepoint_c with
+      | Ok _ = Err _ => discriminate
+      | context[Ok [_]] => right; left; repeat eexists; apply utf8_enc_codepoint_c
+      | context[Ok [_; _]]  => right; right; left; repeat eexists; apply utf8_enc_codepoint_c
+      | context[Ok [_; _; _]]  => right; right; right; left; repeat eexists; apply utf8_enc_codepoint_c
+      | context[Ok [_; _; _; _]]  => right; right; right; right; repeat eexists; apply utf8_enc_codepoint_c
+      end. left. eexists. reflexivity.
 Defined.
 
 Ltac for_all_valid_utf8_encodings c :=
   let encodings := constr:(utf8_encode_codepoint_correct c) in
   let rec f H :=
     match type of H with
+    | exists error: unicode_encode_error, _ => let e := fresh "err" in destruct H as [err H]
     | exists bit : bool, _ => let b := fresh "b" in destruct H as [b _rest]; f _rest
     | ?a /\ ?b /\ ?c => destruct H as [eq [c_eq no_overlong]]
     | ?a /\ ?b => destruct H as [eq c_eq]
@@ -213,13 +212,13 @@ Ltac for_all_valid_utf8_encodings c :=
 
 Theorem encoding_size_correct :
   (forall byte b1 b2 b3 b4 b5 b6 b7, byte = (Byte.of_bits (b1, (b2, (b3, (b4, (b5, (b6, (b7, false)))))))) <->
-      encoding_size_from_header byte = Some (OneByte (b7, b6, b5, b4, b3, b2, b1)))
+                                  encoding_size_from_header byte = Some (OneByte (b7, b6, b5, b4, b3, b2, b1)))
   /\ (forall byte b1 b2 b3 b4 b5, byte = (Byte.of_bits (b1, (b2, (b3, (b4, (b5, (false, (true, true)))))))) <->
-         encoding_size_from_header byte = Some (TwoBytes (b5, b4, b3, b2, b1)))
+                              encoding_size_from_header byte = Some (TwoBytes (b5, b4, b3, b2, b1)))
   /\ (forall byte b1 b2 b3 b4, byte = (Byte.of_bits (b1, (b2, (b3, (b4, (false, (true, (true, true)))))))) <->
-         encoding_size_from_header byte = Some (ThreeBytes (b4, b3, b2, b1)))
+                           encoding_size_from_header byte = Some (ThreeBytes (b4, b3, b2, b1)))
   /\ (forall byte b1 b2 b3, byte = (Byte.of_bits (b1, (b2, (b3, (false, (true, (true, (true, true)))))))) <->
-         encoding_size_from_header byte = Some (FourBytes (b3, b2, b1))).
+                        encoding_size_from_header byte = Some (FourBytes (b3, b2, b1))).
 Proof.
   repeat (split; intros; subst);
     try (unfold encoding_size_from_header; repeat rewrite Byte.to_bits_of_bits;
@@ -290,7 +289,7 @@ Proof.
 Defined.
 
 Theorem parse_codepoint_encode_correct : forall c bytes rest,
-    utf8_encode_codepoint c = Some bytes ->
+    utf8_encode_codepoint c = Ok bytes ->
     parse_codepoint (bytes ++ rest)%list = Ok (c, rest).
 Proof.
   Opaque Byte.of_bits.
@@ -304,30 +303,31 @@ Proof.
     injection _rest; intros; rewrite H0;
     simpl; unfold parse_codepoint, parse_header, encoding_size_from_header, parse_continuation; rewrite Byte.to_bits_of_bits;
     crush_bits;
-      subst; simpl;
-      repeat (rewrite parser_map_correct; simpl; rewrite Byte.to_bits_of_bits; simpl; rewrite Byte.to_bits_of_bits);
-      try reflexivity;
-      no_overlongs2; auto; subst; try discriminate.
+    subst; simpl;
+    repeat (rewrite parser_map_correct; simpl; rewrite Byte.to_bits_of_bits; simpl; rewrite Byte.to_bits_of_bits);
+    try reflexivity;
+    no_overlongs2; auto; subst; try discriminate.
+  destruct no_overlongs as [[eb1 [eb2 [eb3 [eb4 eb5]]]] | [eb1 [eb2 | [ eb3 | [ eb4 | eb5]]]]]; discriminate.
 Defined.
 
 Theorem encode_parse_codepoint_correct : forall bytes code rest,
     parse_codepoint bytes = Ok (code, rest) -> 
     exists prefix,
-      (utf8_encode_codepoint code = Some prefix) /\ bytes = (prefix ++ rest)%list.
+      (utf8_encode_codepoint code = Ok prefix) /\ bytes = (prefix ++ rest)%list.
 Proof.
   intros.
   destruct bytes; [ discriminate H |].
   unfold parse_codepoint, parse_header, encoding_size_from_header, bind in H.
   to_bits b; crush_bits; try discriminate H;
-  match type of H with
-  | context[FirstRange _] => inversion H; subst; repeat eexists
-  | context[SecondRange _ _] => destruct_parse_continuation; crush_bits; try discriminate; inversion H; subst; repeat eexists
-  | context[ThirdRange _ _ _] => destruct_parse_continuation; rewrite  parser_map_correct in H; unfold predicate in H; destruct bytes as [| byte bytes_rest]; try discriminate H;
-                                to_bits byte; destruct b17; destruct b16; try discriminate; simpl in H; rewrite byte_bits1 in H; rewrite Byte.to_bits_of_bits in H; crush_bits; inversion H; subst; repeat eexists
-  | context[FourthRange _ _ _] => destruct_parse_continuation; rewrite parser_map_correct in H; destruct bytes as [| bytes bytes_rest]; try discriminate; to_bits bytes;
-  apply (f_equal Byte.to_bits) in byte_bits1 as byte_to_bits1; rewrite Byte.to_bits_of_bits in byte_to_bits1; simpl in H; rewrite byte_to_bits1 in H; destruct b17; destruct b16; try discriminate; simpl in H;
-  rewrite parser_map_correct in H; destruct bytes_rest as [| byte1 bytes_rest1]; try discriminate; to_bits byte1;
-  apply (f_equal Byte.to_bits) in byte_bits2 as byte_to_bits2; rewrite Byte.to_bits_of_bits in byte_to_bits2; simpl in H; rewrite byte_to_bits2 in H; destruct b23; destruct b22; try discriminate; simpl in H; rewrite byte_to_bits1 in H; rewrite byte_to_bits2 in H; crush_bits; try discriminate; inversion H; subst; repeat eexists
+    match type of H with
+    | context[FirstRange _] => inversion H; subst; repeat eexists
+    | context[SecondRange _ _] => destruct_parse_continuation; crush_bits; try discriminate; inversion H; subst; repeat eexists
+    | context[ThirdRange _ _ _] => destruct_parse_continuation; rewrite  parser_map_correct in H; unfold predicate in H; destruct bytes as [| byte bytes_rest]; try discriminate H;
+                                  to_bits byte; destruct b17; destruct b16; try discriminate; simpl in H; rewrite byte_bits1 in H; rewrite Byte.to_bits_of_bits in H; crush_bits; inversion H; subst; repeat eexists
+    | context[FourthRange _ _ _] => destruct_parse_continuation; rewrite parser_map_correct in H; destruct bytes as [| bytes bytes_rest]; try discriminate; to_bits bytes;
+                                   apply (f_equal Byte.to_bits) in byte_bits1 as byte_to_bits1; rewrite Byte.to_bits_of_bits in byte_to_bits1; simpl in H; rewrite byte_to_bits1 in H; destruct b17; destruct b16; try discriminate; simpl in H;
+                                   rewrite parser_map_correct in H; destruct bytes_rest as [| byte1 bytes_rest1]; try discriminate; to_bits byte1;
+                                   apply (f_equal Byte.to_bits) in byte_bits2 as byte_to_bits2; rewrite Byte.to_bits_of_bits in byte_to_bits2; simpl in H; rewrite byte_to_bits2 in H; destruct b23; destruct b22; try discriminate; simpl in H; rewrite byte_to_bits1 in H; rewrite byte_to_bits2 in H; crush_bits; try discriminate; inversion H; subst; repeat eexists
 
   | _ => idtac
   end.
@@ -350,7 +350,7 @@ Admitted.
       
 
 Lemma parse_single_codepoint_correct : forall c bytes,
-    (utf8_encode_codepoint c) = Some bytes ->
+    (utf8_encode_codepoint c) = Ok bytes ->
     parse_codepoint bytes = Ok (c, []).
 Proof.
   intros.
@@ -389,7 +389,7 @@ Proof.
   - destruct unicode_lesser as [| codepoint1 unicode_rest1] eqn:E_lesser.
     + inversion H0. reflexivity.
     + simpl in H0.
-      destruct (utf8_encode_codepoint codepoint1) eqn:U_enc_codepoint1; [| discriminate H0].
+      destruct (utf8_encode_codepoint codepoint1) as [utf8_bytes | err ] eqn:U_enc_codepoint1; [| discriminate H0].
       destruct (utf8_encode unicode_rest1) as [[val2 rest2] | err] eqn:U_enc_unicode_rest1; [| discriminate H0].
       inversion_clear H0. subst.
       apply IHunicode in U_enc_unicode_rest1; try (simpl in H; lia).
@@ -398,10 +398,10 @@ Proof.
       rewrite U_enc_codepoint1.
       apply parse_codepoint_strong_progress in U_enc_codepoint1.
       unfold bind.
-      rewrite <- all_aux_saturation_aux with (n := (S (Datatypes.length (l ++ val2))));
+      rewrite <- all_aux_saturation_aux with (n := (S (Datatypes.length (utf8_bytes ++ val2))));
         try apply parse_codepoint_strong_progress; try lia.
       fold (all parse_codepoint val2). fold (utf8_decode val2). rewrite U_enc_unicode_rest1.
-      destruct ((l ++ val2)%list) eqn:L.
+      destruct ((utf8_bytes ++ val2)%list) eqn:L.
       * apply app_eq_nil in L as [L1 L2]. subst. inversion U_enc_codepoint1.
       * reflexivity.
 Defined.

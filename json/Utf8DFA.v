@@ -1,7 +1,8 @@
 From Coq Require Import Strings.Byte.
 
-Require Import Json.Parser.
 Require Import Json.Utf8.
+Require Import Json.Parser.
+From Coq Require Import Lia.
 
 Local Notation "0" := false.
 Local Notation "1" := true.
@@ -10,7 +11,7 @@ Definition zero_codep : codepoint := (0, b4_zero, b4_zero, b4_zero, b4_zero, b4_
 
 (* An implementation of the fast and efficient UTF8 decoding DFA *)
 (* presented in the following post: *)
-(* https://bjoern.hoehrmann.de/utf-8/decoder/dfa/ *)
+(* https://writings.sh/post/en/utf8/ *)
 
 Inductive range :=
   Range_00_7F (*  0 *)
@@ -20,9 +21,7 @@ Inductive range :=
 | Range_C0_C1 (*  8 *)
 | Range_C2_DF (*  2 *)
 | Byte_E0     (* 10 *)
-| Range_E1_EC (*  3 *)
-| Byte_ED     (*  4 *)
-| Range_EE_EF (*  3 *)
+| Range_E1_EF (*  3 *)
 | Byte_F0     (* 11 *)
 | Range_F1_F3 (*  6 *)
 | Byte_F4     (*  5 *)
@@ -31,13 +30,12 @@ Inductive range :=
 
 Inductive parsing_state :=
   Initial (* State0 *)
-| State2
-| State3
-| State4
-| State5
-| State6
-| State7
-| State8.
+| Expecting_1_80_BF
+| Expecting_2_80_BF
+| Expecting_3_80_BF
+| Expecting_2_A0_BF
+| Expecting_3_90_BF
+| Expecting_3_80_8F.
 
 Inductive parsing_result :=
   Finished (codep: codepoint)
@@ -61,9 +59,7 @@ Definition byte_range (b: byte) : range :=
   | xc2 | xc3 | xc4 | xc5 | xc6 | xc7 | xc8 | xc9 | xca | xcb | xcc | xcd | xce | xcf
   | xd0 | xd1 | xd2 | xd3 | xd4 | xd5 | xd6 | xd7 | xd8 | xd9 | xda | xdb | xdc | xdd | xde | xdf => Range_C2_DF
   | xe0 => Byte_E0
-  | xe1 | xe2 | xe3 | xe4 | xe5 | xe6 | xe7 | xe8 | xe9 | xea | xeb | xec => Range_E1_EC
-  | xed => Byte_ED
-  | xee | xef => Range_EE_EF
+  | xe1 | xe2 | xe3 | xe4 | xe5 | xe6 | xe7 | xe8 | xe9 | xea | xeb | xec | xed | xee | xef => Range_E1_EF
   | xf0 => Byte_F0
   | xf1 | xf2 | xf3 => Range_F1_F3
   | xf4 => Byte_F4
@@ -71,77 +67,77 @@ Definition byte_range (b: byte) : range :=
   end.
 
 
-Definition push_bottom_bits (carry: codepoint) (b: byte) : @result codepoint unicode_decode_error :=
+Definition push_bottom_bits (carry: codepoint) (b: byte): codepoint :=
   let '(_, _, (_, b1, b2, b3), (b4, b5, b6, b7), (b8, b9, b10, b11), (b12, b13, b14, b15)) := carry in
   let '(b21, (b20, (b19, (b18, (b17, (b16, (h1, h2))))))) := Byte.to_bits b in
-  match (h1, h2) with
-    (0, 1) => Ok (b1, (b2, b3, b4, b5), (b6, b7, b8, b9), (b10, b11, b12, b13), (b14, b15, b16, b17), (b18, b19, b20, b21))
-  | _ => Err (InvalidContinuationHeader (Some b))
-  end.
+  (b1, (b2, b3, b4, b5), (b6, b7, b8, b9), (b10, b11, b12, b13), (b14, b15, b16, b17), (b18, b19, b20, b21)).
 
-Definition extract_bits (b: byte) : @result codepoint unicode_decode_error :=
+Definition extract_7_bits (b: byte) : codepoint :=
   let '(b1, (b2, (b3, (b4, (b5, (b6, (b7, b8))))))) := Byte.to_bits b in
-  match byte_range b with
-  | Range_00_7F => Ok (0, b4_zero, b4_zero, b4_zero, (0, b7, b6, b5), (b4, b3, b2, b1))
-  | Range_C2_DF => Ok(0, b4_zero, b4_zero, b4_zero, (0, 0, 0, b5), (b4, b3, b2, b1))
-  | Range_E1_EC | Range_EE_EF | Byte_E0 | Byte_ED  => Ok (0, b4_zero, b4_zero, b4_zero, b4_zero, (b4, b3, b2, b1))
-  | Range_F1_F3 | Byte_F4 | Byte_F0 => Ok (0, b4_zero, b4_zero, b4_zero, b4_zero, (0, b3, b2, b1))
-  | _ => Err (InvalidStartHeader (Some b))
+  (0, b4_zero, b4_zero, b4_zero, (0, b7, b6, b5), (b4, b3, b2, b1)).
+
+Definition extract_5_bits (b: byte) : codepoint :=
+  let '(b1, (b2, (b3, (b4, (b5, (b6, (b7, b8))))))) := Byte.to_bits b in
+  (0, b4_zero, b4_zero, b4_zero, (0, 0, 0, b5), (b4, b3, b2, b1)).
+
+Definition extract_4_bits (b: byte) : codepoint :=
+  let '(b1, (b2, (b3, (b4, (b5, (b6, (b7, b8))))))) := Byte.to_bits b in
+  (0, b4_zero, b4_zero, b4_zero, b4_zero, (b4, b3, b2, b1)).
+
+Definition extract_3_bits (b: byte) : codepoint :=
+  let '(b1, (b2, (b3, (b4, (b5, (b6, (b7, b8))))))) := Byte.to_bits b in
+  (0, b4_zero, b4_zero, b4_zero, b4_zero, (0, b3, b2, b1)).
+
+Definition next_state (state: parsing_state) (carry: codepoint) (b: byte) : @result parsing_result (@error unicode_decode_error) :=
+  match (state, byte_range b) with
+  | (Initial, Range_00_7F) => Ok (Finished (extract_7_bits b))
+  | (Initial, Range_C2_DF) => Ok (More Expecting_1_80_BF (extract_5_bits b))
+  | (Initial, Byte_E0)     => Ok (More Expecting_2_A0_BF (extract_4_bits b))
+  | (Initial, Range_E1_EF) => Ok (More Expecting_2_80_BF (extract_5_bits b))
+  | (Initial, Byte_F0)     => Ok (More Expecting_3_90_BF (extract_3_bits b))
+  | (Initial, Range_F1_F3) => Ok (More Expecting_3_80_BF (extract_3_bits b))
+  | (Initial, Byte_F4)     => Ok (More Expecting_3_80_8F (extract_3_bits b))
+  | (Initial, Range_C0_C1) => Err (Error InvalidSurrogatePair)
+  | (Initial, Range_F5_FF) => Err (Error CodepointTooBig)
+  | (Initial, _) => Err (Error (InvalidStartHeader (Some b)))
+  | (Expecting_1_80_BF,  Range_A0_BF)
+  | (Expecting_1_80_BF,  Range_90_9F)
+  | (Expecting_1_80_BF,  Range_80_8F) => Ok (Finished (push_bottom_bits carry b))
+  | (Expecting_2_80_BF,  Range_80_8F)
+  | (Expecting_2_80_BF,  Range_90_9F)
+  | (Expecting_2_80_BF,  Range_A0_BF) => Ok (More Expecting_1_80_BF (push_bottom_bits carry b))
+  | (Expecting_3_80_BF, Range_80_8F)
+  | (Expecting_3_80_BF, Range_90_9F)
+  | (Expecting_3_80_BF, Range_A0_BF)
+  | (Expecting_3_90_BF, Range_90_9F)
+  | (Expecting_3_90_BF, Range_A0_BF)
+  | (Expecting_3_80_8F, Range_80_8F) => Ok (More Expecting_2_80_BF (push_bottom_bits carry b))
+  | (Expecting_2_A0_BF, Range_A0_BF) => Ok (More Expecting_1_80_BF (push_bottom_bits carry b))
+  | (Expecting_3_80_8F, Range_90_9F)
+  | (Expecting_3_80_8F, Range_A0_BF) => Err (Error CodepointTooBig)
+  | _ => Err (Error (InvalidContinuationHeader (Some b)))
   end.
 
-
-Definition next_state (state: parsing_state) (carry: codepoint) (b: byte) : @result parsing_result unicode_decode_error :=
-  let byte_kind: range := byte_range b in
-  let* code: codepoint :=
-    match state with
-    | Initial => extract_bits b
-    | _other => push_bottom_bits carry b
-    end in
-  match (state, byte_kind) with
-  | (Initial, Range_00_7F)
-  | (State2,  Range_A0_BF)
-  | (State2,  Range_90_9F)
-  | (State2,  Range_80_8F) => Ok (Finished code)
-  | (Initial, Byte_F4)     => Ok (More State8 code)
-  | (Initial, Range_F1_F3) => Ok (More State7 code)
-  | (Initial, Byte_F0)     => Ok (More State6 code)
-  | (Initial, Byte_E0)     => Ok (More State4 code)
-  | (Initial, Byte_ED)     => Ok (More State5 code)
-  | (State8,  Range_80_8F)
-  | (State7,  Range_80_8F)
-  | (State7,  Range_90_9F)
-  | (State7,  Range_A0_BF)
-  | (Initial, Range_E1_EC)
-  | (Initial, Range_EE_EF)
-  | (State6,  Range_90_9F)
-  | (State6,  Range_A0_BF) => Ok (More State3 code)
-  | (Initial, Range_C2_DF)
-  | (State4,  Range_A0_BF)
-  | (State5,  Range_80_8F)
-  | (State5,  Range_90_9F)
-  | (State3,  Range_80_8F)
-  | (State3,  Range_90_9F)
-  | (State3,  Range_A0_BF) => Ok (More State2 code)
-  | _ => Err (InvalidContinuationHeader (Some b))
-  end.
-
-Fixpoint utf8_dfa_decode_rec (bytes: list byte) (carry: codepoint) (state: parsing_state) (acc: list codepoint) : @result (unicode_str * (list byte)) unicode_decode_error :=
+Fixpoint utf8_dfa_decode_rec (bytes: list byte) (carry: codepoint) (state: parsing_state)
+  : @result (unicode_str * (list byte)) (@error unicode_decode_error) :=
   match bytes with
-  | nil => Ok (List.rev acc, nil)
+  | nil => Ok (nil, nil)
   | cons b rest =>
       let* next := next_state state carry b in
       match next with
-      | Finished codep => utf8_dfa_decode_rec rest zero_codep Initial (codep :: acc)
-      | More state codep => utf8_dfa_decode_rec rest codep state acc
+      | Finished codep =>
+          let* (vals, rest) := utf8_dfa_decode_rec rest zero_codep Initial in
+          Ok (cons codep vals, rest)
+      | More state codep =>
+          utf8_dfa_decode_rec rest codep state
       end
   end.
-    
-Definition utf8_dfa_decode (bytes: list byte) : @result (unicode_str * (list byte)) unicode_decode_error :=
-  utf8_dfa_decode_rec bytes zero_codep Initial nil.
+
+Definition utf8_dfa_decode (bytes: list byte) : @result (unicode_str * (list byte)) (@error unicode_decode_error) :=
+  utf8_dfa_decode_rec bytes zero_codep Initial.
 
 From Coq Require Import Lists.List. Import ListNotations.
 From Coq Require Import Strings.String.
-Compute (fmap (fun '(s, r) => (List.map show_codepoint s, r)) (utf8_dfa_decode [x41; xe2; x89; xa2; xce; x91; x2e])).
 
 (* The character sequence U+0041 U+2262 U+0391 U+002E "A<NOT IDENTICAL *)
 (* TO><ALPHA>." is encoded in UTF-8 as follows: *)
@@ -152,6 +148,7 @@ Compute (fmap (fun '(s, r) => (List.map show_codepoint s, r)) (utf8_dfa_decode [
 Definition test1 :
   (fmap (fun '(s, r) => (List.map show_codepoint s, r)) (utf8_dfa_decode [x41; xe2; x89; xa2; xce; x91; x2e]))
   = Ok (["U+0041"%string; "U+2262"%string; "U+0391"%string; "U+002E"%string], []).
+  simpl.
   reflexivity.
 Qed.
 

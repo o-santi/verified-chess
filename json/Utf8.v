@@ -81,7 +81,9 @@ Inductive codepoint_range :=
 | FourthRange (fst: b3) (snd: b6) (trd: b6) (frth: b6).
 
 Inductive unicode_decode_error :=
-| OverlongEncoding (cr: codepoint_range)
+| OverlongEncoding
+| InvalidSurrogatePair
+| CodepointTooBig
 | InvalidContinuationHeader (x: option byte)
 | InvalidStartHeader (x: option byte).
 
@@ -109,20 +111,23 @@ Definition show_codepoint (c: codepoint) : string :=
 (* 16#D800 = 2#1101100000000000 *)
 (* 16#DFFF = 2#1101111111111111 *)
 
-Definition codepoint_range_to_codepoint (cr: codepoint_range) : option codepoint :=
+Definition codepoint_range_to_codepoint (cr: codepoint_range) : @result codepoint unicode_decode_error :=
   match cr with
   | FirstRange (b1, b2, b3, b4, b5, b6, b7) =>
-      Some (0, b4_zero, b4_zero, b4_zero, (0, b1, b2, b3), (b4, b5, b6, b7))
-  | SecondRange (0, 0, 0, 0, _) _snd => None (* overlong encoding *)
+      Ok (0, b4_zero, b4_zero, b4_zero, (0, b1, b2, b3), (b4, b5, b6, b7))
+  | SecondRange (0, 0, 0, 0, _) _snd => Err OverlongEncoding (* overlong encoding *)
   | SecondRange (b1, b2, b3, b4, b5) (b6, b7, b8, b9, b10, b11) =>
-      Some (0, b4_zero, b4_zero, (0, b1, b2, b3), (b4, b5, b6, b7), (b8, b9, b10, b11))
-  | ThirdRange (0, 0, 0, 0) (0, _, _, _, _, _) _trd => None (* overlong encoding *)
-  | ThirdRange (1, 1, 0, 1) (1, _, _, _, _, _) _trd => None (* surrogate pairs are not allowed *)                 
+      Ok (0, b4_zero, b4_zero, (0, b1, b2, b3), (b4, b5, b6, b7), (b8, b9, b10, b11))
+  | ThirdRange (0, 0, 0, 0) (0, _, _, _, _, _) _trd => Err OverlongEncoding (* overlong encoding *)
+  | ThirdRange (1, 1, 0, 1) (1, _, _, _, _, _) _trd => Err InvalidSurrogatePair (* surrogate pairs are not allowed *)                 
   | ThirdRange (b1, b2, b3, b4) (b5, b6, b7, b8, b9, b10) (b11, b12, b13, b14, b15, b16) =>
-      Some (0, b4_zero, (b1, b2, b3, b4), (b5, b6, b7, b8), (b9, b10, b11, b12), (b13, b14, b15, b16))
-  | FourthRange (0, 0, 0) (0, 0, _, _, _, _) _trd _frth => None (* overlong encoding *)
-  | FourthRange (b1, b2, b3) (b4, b5, b6, b7, b8, b9) (b10, b11, b12, b13, b14, b15) (b16, b17, b18, b19, b20, b21) =>
-      Some (b1, (b2, b3, b4, b5), (b6, b7, b8, b9), (b10, b11, b12, b13), (b14, b15, b16, b17), (b18, b19, b20, b21))
+      Ok (0, b4_zero, (b1, b2, b3, b4), (b5, b6, b7, b8), (b9, b10, b11, b12), (b13, b14, b15, b16))
+  | FourthRange (0, 0, 0) (0, 0, _, _, _, _) _trd _frth => Err OverlongEncoding (* overlong encoding *)
+  | FourthRange (0, b2, b3) (b4, b5, b6, b7, b8, b9) (b10, b11, b12, b13, b14, b15) (b16, b17, b18, b19, b20, b21) =>
+      Ok (0, (b2, b3, b4, b5), (b6, b7, b8, b9), (b10, b11, b12, b13), (b14, b15, b16, b17), (b18, b19, b20, b21))
+  | FourthRange (1, 0, 0) (0, 0, b6, b7, b8, b9) (b10, b11, b12, b13, b14, b15) (b16, b17, b18, b19, b20, b21) =>
+      Ok (1, (0, 0, 0, 0), (b6, b7, b8, b9), (b10, b11, b12, b13), (b14, b15, b16, b17), (b18, b19, b20, b21))
+  | FourthRange _fst _snd _trd _frth => Err CodepointTooBig
   (* | _ => None *)
   end.
 
@@ -197,8 +202,8 @@ Definition parse_codepoint : @parser codepoint byte unicode_decode_error :=
           Ok (FourthRange fst snd trd frth, rest)
       end in
     match codepoint_range_to_codepoint codepoint_bits with
-    | Some code => Ok (code, rest)
-    | None      => Err (Error (OverlongEncoding codepoint_bits))
+    | Ok code => Ok (code, rest)
+    | Err err => Err (Error err)
     end.
 
 Definition utf8_decode : @parser unicode_str byte unicode_decode_error :=
@@ -250,6 +255,7 @@ Qed.
 Definition test4 :
   (fmap (fun '(s, r) => (List.map show_codepoint s, r)) (utf8_decode [xef; xbb; xbf; xf0; xa3; x8e; xb4]))
   = Ok (["U+FEFF"%string; "U+0233B4"%string], []).
+  simpl.
   reflexivity.
 Qed.
 
@@ -257,30 +263,38 @@ Definition to_unicode (s: string) : @result unicode_str (@error unicode_decode_e
   let bytes := List.map byte_of_ascii (list_ascii_of_string s) in
   fmap (fun '(v, _) => v) (utf8_decode bytes).
 
+Inductive unicode_encode_error :=
+| EncodingCodepointTooBig (c: codepoint)
+| IllegalSurrogatePair (c: codepoint).
+
 (* The definition of UTF-8 prohibits encoding character numbers between *)
-(*    U+D800 and U+DFFF *)
-Definition utf8_encode_codepoint (c: codepoint) : option (list byte) :=
+(*    U+D800 and U+DFFF
+   and characters bigger than U+10FFFF*)
+Definition utf8_encode_codepoint (c: codepoint) : @result (list byte) unicode_encode_error :=
   match c with
   | (0, (0, 0, 0, 0), (0, 0, 0, 0), (0, 0, 0, 0), (0, b1, b2, b3), (b4, b5, b6, b7)) =>
-      Some [ Byte.of_bits (b7, (b6, (b5, (b4, (b3, (b2, (b1, 0))))))) ]
+      Ok [ Byte.of_bits (b7, (b6, (b5, (b4, (b3, (b2, (b1, 0))))))) ]
   | (0, (0, 0, 0, 0), (0, 0, 0, 0), (0, b1, b2, b3), (b4, b5, b6, b7), (b8, b9, b10, b11)) =>
-      Some [ Byte.of_bits (b5,  (b4,  (b3, (b2, (b1, (0,  (1, 1)))))));
-             Byte.of_bits (b11, (b10, (b9, (b8, (b7, (b6, (0, 1))))))) ]
+      Ok [ Byte.of_bits (b5,  (b4,  (b3, (b2, (b1, (0,  (1, 1)))))));
+           Byte.of_bits (b11, (b10, (b9, (b8, (b7, (b6, (0, 1))))))) ]
   | (0, (0, 0, 0, 0), (1, 1, 0, 1), (1, b6, b7, b8), (b9, b10, b11, b12), (b13, b14, b15, b16)) =>
-      None
+      Err (IllegalSurrogatePair c)
   | (0, (0, 0, 0, 0), (b1, b2, b3, b4), (b5, b6, b7, b8), (b9, b10, b11, b12), (b13, b14, b15, b16)) =>
-      Some [ Byte.of_bits (b4,  (b3,  (b2,  (b1,  (0,   (1,   (1, 1)))))));
-             Byte.of_bits (b10, (b9,  (b8,  (b7,  (b6,  (b5,  (0, 1)))))));
-             Byte.of_bits (b16, (b15, (b14, (b13, (b12, (b11, (0, 1)))))))]
-  | (b1, (b2, b3, b4, b5), (b6, b7, b8, b9), (b10, b11, b12, b13), (b14, b15, b16, b17), (b18, b19, b20, b21)) =>
-      Some [ Byte.of_bits (b3,  (b2,  (b1,  (0,   (1,   (1,   (1, 1)))))));
-             Byte.of_bits (b9,  (b8,  (b7,  (b6,  (b5,  (b4,  (0, 1)))))));
-             Byte.of_bits (b15, (b14, (b13, (b12, (b11, (b10, (0, 1)))))));
-             Byte.of_bits (b21, (b20, (b19, (b18, (b17, (b16, (0, 1))))))) ]
+      Ok [ Byte.of_bits (b4,  (b3,  (b2,  (b1,  (0,   (1,   (1, 1)))))));
+           Byte.of_bits (b10, (b9,  (b8,  (b7,  (b6,  (b5,  (0, 1)))))));
+           Byte.of_bits (b16, (b15, (b14, (b13, (b12, (b11, (0, 1)))))))]
+  | (0, (b2, b3, b4, b5), (b6, b7, b8, b9), (b10, b11, b12, b13), (b14, b15, b16, b17), (b18, b19, b20, b21)) =>
+      Ok [ Byte.of_bits (b3,  (b2,  (0,   (0,   (1,   (1,   (1, 1)))))));
+           Byte.of_bits (b9,  (b8,  (b7,  (b6,  (b5,  (b4,  (0, 1)))))));
+           Byte.of_bits (b15, (b14, (b13, (b12, (b11, (b10, (0, 1)))))));
+           Byte.of_bits (b21, (b20, (b19, (b18, (b17, (b16, (0, 1))))))) ]
+  | (1, (0, 0, 0, 0), (b6, b7, b8, b9), (b10, b11, b12, b13), (b14, b15, b16, b17), (b18, b19, b20, b21)) =>
+      Ok [ Byte.of_bits (0,   (0,   (1,   (0,   (1,   (1,   (1, 1)))))));
+           Byte.of_bits (b9,  (b8,  (b7,  (b6,  (0,   (0,   (0, 1)))))));
+           Byte.of_bits (b15, (b14, (b13, (b12, (b11, (b10, (0, 1)))))));
+           Byte.of_bits (b21, (b20, (b19, (b18, (b17, (b16, (0, 1))))))) ]
+  | _ => Err (EncodingCodepointTooBig c)
   end.
-
-Inductive unicode_encode_error :=
-| IllegalSurrogatePair (c: codepoint).
 
 Fixpoint utf8_encode (unicode: unicode_str) : @result ((list byte) * (list codepoint)) (@error unicode_encode_error) :=
   match unicode with
@@ -288,8 +302,8 @@ Fixpoint utf8_encode (unicode: unicode_str) : @result ((list byte) * (list codep
   | code :: unicode_rest =>
       let bytes := utf8_encode_codepoint code in
       match bytes with
-      | None => Err (Error (IllegalSurrogatePair code))
-      | Some bytes => 
+      | Err err => Err (Error err)
+      | Ok bytes => 
           let* (bytes_rest, unicode_rest) := utf8_encode unicode_rest in
           Ok (bytes ++ bytes_rest, unicode_rest)
       end
